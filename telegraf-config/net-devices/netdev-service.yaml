@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: egress-proxy-snmp
+  namespace: gop-telegraf
+spec:
+  selector: {app: egress-keepalived-snmp}
+  ports:
+    - {name: snmp-dev5, port: 16005, targetPort: 16005, protocol: UDP}

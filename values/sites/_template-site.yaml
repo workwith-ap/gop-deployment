@@ -1,0 +1,9 @@
+# TEMPLATE — copy to values/sites/<dc-code>-loki.yaml when onboarding a
+# new DC. Every site gets one of these, same pattern, no exceptions —
+# see values/sites/tyo7-loki.yaml for a filled-in example.
+loki:
+  storage:
+    s3:
+      endpoint: seaweedfs-s3.DC_CODE_HERE.digitaledgedc.net
+      accessKeyId: REPLACE_WITH_LOKI_RW_ACCESS_KEY
+      secretAccessKey: REPLACE_WITH_LOKI_RW_SECRET_KEY

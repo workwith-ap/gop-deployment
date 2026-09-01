@@ -1,0 +1,167 @@
+# keepalived config template + render script + notify script + PLC
+# proxy startup — all shared identically across every worker via the
+# DaemonSet.
+
+# this worker-IP list is INTERNAL ONLY — it's
+# how the 4 keepalived pods find each other for VRRP negotiation. It has
+# no relationship to, and no visibility from, the external-facing VIP
+# (10.2.218.52) that the firewall rule and the PLC actually reference.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: egress-keepalived-opcua-config
+  namespace: gop-telegraf
+data:
+  keepalived.conf.template: |
+    global_defs {
+        enable_script_security
+        script_user root
+    }
+
+    vrrp_instance VI_OPCUA_EGRESS {
+      state BACKUP
+      interface enp6s18
+      virtual_router_id 52
+      priority __PRIORITY__
+      advert_int 1
+
+      garp_master_delay 1
+      garp_master_repeat 5
+      garp_master_refresh 5
+      garp_master_refresh_repeat 2
+
+      unicast_src_ip __NODE_IP__
+      unicast_peer {
+    __PEER_LIST__
+      }
+
+      virtual_ipaddress {
+        10.2.218.52/24 dev enp6s18
+      }
+
+      notify_master "/etc/keepalived/notify.sh MASTER"
+      notify_backup "/etc/keepalived/notify.sh BACKUP"
+      notify_fault  "/etc/keepalived/notify.sh FAULT"
+    }
+
+  render-config.sh: |
+    #!/bin/sh
+    # This worker-IP list is INTERNAL ONLY — it's how the 4 keepalived
+    # pods find each other for VRRP negotiation. It has no relationship
+    # to, and no visibility from, the external-facing VIP (10.2.218.52)
+    # that the firewall rule and the PLCs actually reference.
+    #
+    # UPDATE THIS LIST when workers are added/removed. Current known
+    # workers:
+    WORKER_IPS="10.2.218.44 10.2.218.45 10.2.218.46 10.2.218.47"
+
+    # Deterministic election order — wk-01 preferred MASTER, then
+    # wk-02, wk-03, wk-04, in descending priority. Avoids same-priority
+    # IP-tiebreak elections, which flip fast and can race the
+    # notify_master/notify_backup handlers (see
+    # CLUSTER_EXPOSURE_STANDARD.md).
+    case "$NODE_IP" in
+      10.2.218.44) PRIORITY=150 ;;
+      10.2.218.45) PRIORITY=140 ;;
+      10.2.218.46) PRIORITY=130 ;;
+      10.2.218.47) PRIORITY=120 ;;
+      *) PRIORITY=100 ;;
+    esac
+
+    PEER_LIST=""
+    for ip in $WORKER_IPS; do
+      if [ "$ip" != "$NODE_IP" ]; then
+        PEER_LIST="${PEER_LIST}    ${ip}\n"
+      fi
+    done
+
+    sed -e "s/__NODE_IP__/${NODE_IP}/" -e "s/__PRIORITY__/${PRIORITY}/" /config/keepalived.conf.template > /tmp/keepalived.conf.stage1
+    awk -v peers="$PEER_LIST" '{gsub(/__PEER_LIST__/, peers); print}' /tmp/keepalived.conf.stage1 > /etc/keepalived/keepalived.conf
+
+    echo "$(date) rendered keepalived.conf for NODE_IP=${NODE_IP}, priority=${PRIORITY}, peers:$(printf '%b' "$PEER_LIST" | tr '\n' ',')"
+
+  notify.sh: |
+    #!/bin/sh
+    # Called by keepalived on every state transition.
+    #
+    # Two things happen only when MASTER, both reversed otherwise:
+    #  1. SNAT rule — rewrites outbound PLC traffic to look like it came
+    #     from .52. Only one node may have this at a time, or multiple
+    #     nodes would try to claim the same source IP simultaneously.
+    #  2. socat proxies — started only on MASTER, killed on step-down,
+    #     same as the SNMP gateway. Avoids stray listeners lingering on
+    #     BACKUP nodes.
+    #  3. /tmp/ready file — kept for visibility/debugging, but is NOT
+    #     what readinessProbe checks anymore (see 02-daemonset.yaml) —
+    #     that reads live interface state directly, since notify
+    #     handlers are forked async and a fast MASTER->BACKUP flip can
+    #     race this file's write against the real transition.
+    STATE="$1"
+    PLC_PORT=4840
+
+    case "$STATE" in
+      MASTER)
+        iptables -t nat -C POSTROUTING -p tcp --dport "$PLC_PORT" -j SNAT --to-source 10.2.218.52 2>/dev/null \
+          || iptables -t nat -A POSTROUTING -p tcp --dport "$PLC_PORT" -j SNAT --to-source 10.2.218.52
+
+        # Start socat proxies when becoming MASTER
+        /bin/sh /config/start-proxies.sh &
+
+        touch /tmp/ready
+        echo "$(date) MASTER — SNAT ensured, proxies started, marked ready"
+        ;;
+      BACKUP|FAULT)
+        iptables -t nat -D POSTROUTING -p tcp --dport "$PLC_PORT" -j SNAT --to-source 10.2.218.52 2>/dev/null
+
+        # Stop proxies on step-down
+        pkill -f socat 2>/dev/null || true
+
+        rm -f /tmp/ready
+        echo "$(date) $STATE — SNAT removed, proxies stopped, marked not-ready"
+        ;;
+    esac
+
+  start-proxies.sh: |
+    #!/bin/sh
+    # One socat TCP listener per PLC, bound explicitly to the VIP and
+    # started only on MASTER (via notify.sh), not unconditionally on
+    # every pod. Port scheme unchanged: 14000 + the PLC's own last IP
+    # octet, so the port number itself tells you which PLC it maps to
+    # (14060 = 10.2.223.60, etc.) — no separate lookup table to keep in
+    # sync.
+    #
+    # Add a new line to MAPPINGS when a new PLC is onboarded — also
+    # needs a matching port added to 02-daemonset.yaml and
+    # 03-service.yaml.
+    VIP="10.2.218.52"
+
+    pkill -f socat 2>/dev/null || true
+
+    # Scalable device mappings (LISTEN_PORT:TARGET_IP:TARGET_PORT)
+    MAPPINGS="
+    14060:10.2.223.60:4840
+    14061:10.2.223.61:4840
+    14062:10.2.223.62:4840
+    14066:10.2.223.66:4840
+    14067:10.2.223.67:4840
+    14068:10.2.223.68:4840
+    14072:10.2.223.72:4840
+    14073:10.2.223.73:4840
+    14074:10.2.223.74:4840
+    14080:10.2.223.80:4840
+    14081:10.2.223.81:4840
+    14082:10.2.223.82:4840
+    14083:10.2.223.83:4840
+    14084:10.2.223.84:4840
+    14088:10.2.223.88:4840
+    14089:10.2.223.89:4840
+    14090:10.2.223.90:4840
+    "
+
+    echo "$MAPPINGS" | grep -v '^$' | while IFS=":" read -r LISTEN_PORT TARGET_IP TARGET_PORT; do
+      echo "$(date) Starting proxy: :${LISTEN_PORT} -> ${TARGET_IP}:${TARGET_PORT} bound to ${VIP}"
+      socat TCP-LISTEN:${LISTEN_PORT},bind=${VIP},fork,reuseaddr TCP:${TARGET_IP}:${TARGET_PORT},bind=${VIP} &
+    done
+
+    echo "$(date) all 17 PLC proxy listeners active and listening"

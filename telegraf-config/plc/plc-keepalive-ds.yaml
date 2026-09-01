@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: egress-keepalived-opcua
+  namespace: gop-telegraf
+spec:
+  # Replace all pods at once during updates — prevents a rollout from
+  # getting stuck on BACKUP nodes waiting for a MASTER to step down.
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 100%
+  selector:
+    matchLabels: {app: egress-keepalived-opcua}
+  template:
+    metadata:
+      labels: {app: egress-keepalived-opcua}
+    spec:
+      hostNetwork: true
+      containers:
+        - name: keepalived
+          image: debian:bookworm-slim
+          env:
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              apt-get update
+              apt-get install -y --no-install-recommends keepalived iptables socat
+              cp /config/notify.sh /etc/keepalived/notify.sh
+              chmod +x /etc/keepalived/notify.sh
+              /config/render-config.sh
+              exec keepalived --dont-fork --log-console --use-file /etc/keepalived/keepalived.conf
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN", "NET_RAW"]
+          # Checks live interface state — ONLY MASTER reports 1/1.
+          # Not derived from /tmp/ready: keepalived's notify handlers
+          # run as separate forked processes, so a fast MASTER->BACKUP
+          # flip can race notify_backup's cleanup against
+          # notify_master's file write and leave a stale positive.
+          # Reading the interface directly has no such race.
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "ip -o addr show enp6s18 | grep -q '10.2.218.52'"]
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            failureThreshold: 1
+          volumeMounts:
+            - {name: config, mountPath: /config}
+          ports:
+            - {containerPort: 14060, name: plc060}
+            - {containerPort: 14061, name: plc061}
+            - {containerPort: 14062, name: plc062}
+            - {containerPort: 14066, name: plc066}
+            - {containerPort: 14067, name: plc067}
+            - {containerPort: 14068, name: plc068}
+            - {containerPort: 14072, name: plc072}
+            - {containerPort: 14073, name: plc073}
+            - {containerPort: 14074, name: plc074}
+            - {containerPort: 14080, name: plc080}
+            - {containerPort: 14081, name: plc081}
+            - {containerPort: 14082, name: plc082}
+            - {containerPort: 14083, name: plc083}
+            - {containerPort: 14084, name: plc084}
+            - {containerPort: 14088, name: plc088}
+            - {containerPort: 14089, name: plc089}
+            - {containerPort: 14090, name: plc090}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {memory: 128Mi}
+      volumes:
+        - name: config
+          configMap:
+            name: egress-keepalived-opcua-config
+            # 0755, not 0644: render-config.sh is executed directly
+            # from this mount (no cp/chmod step), so it needs execute
+            # permission — same as the fixed SNMP DaemonSet. This does
+            # NOT affect keepalived's own config file: the daemon reads
+            # /etc/keepalived/keepalived.conf, a separate file written
+            # by render-config.sh's sed/awk redirect at container
+            # startup, not this mounted template.
+            defaultMode: 0755

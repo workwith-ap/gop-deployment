@@ -1,0 +1,87 @@
+# TYO6 — populated from Project_Horus_File_TYO6.xlsx (Mapping File tab).
+# 75 RLE WIFI-TH sensors, standalone WiFi devices, NOT BMS-integrated.
+# Each has its own static IP, one-way UDP push, no ack, ~3h transmit interval
+# (per General tab: "Suggested Time Sampling of polling the data: 10800 seconds").
+
+# --- Prometheus fields ---
+server:
+  global:
+    external_labels:
+      dc: "tyo6"
+      region: "apac-ne"
+
+  remoteWrite:
+    - url: "http://gopadmin:PASSWORD_HERE@thanos-receive.tyo7.digitaledgedc.net/api/v1/receive"
+      # separate cluster from the hub — same as jkt1, pushes over WAN
+
+# --- Telegraf fields ---
+config:
+  global_tags:
+    dc: "tyo6"
+    site_name: "Tokyo DC6"
+
+# =========================================================================
+# FIREWALL REQUEST — ready to file, built from the actual mapping file
+# (see tyo6-th-sensor-ips.txt for the full 75-address list, same values
+# repeated here for convenience).
+#
+#   Direction:     RLE WIFI-TH sensors -> gop-wk-*.tyo6  (inbound)
+#   Source:        10.2.226.171 - 10.2.226.245  (75 hosts, contiguous —
+#                   see tyo6-th-sensor-ips.txt for the literal list if
+#                   your firewall vendor needs individual /32s instead
+#                   of a range)
+#   Destination:   worker node IPs at TYO6, port 3184/udp
+#                   (NOT the placeholder 30094 used in the generic
+#                   template — 3184 is the port these specific devices
+#                   are already configured to send to, confirmed from
+#                   the "Port" column in Mapping File)
+#   Protocol/Port: UDP/3184
+#   Ticket filed:  DATE_HERE
+#   Approved:      DATE_HERE
+#
+# STILL OPEN: confirm with facility team what destination IP:port is
+# CURRENTLY programmed into these 75 physical devices.
+#
+# UPDATE: found it. Per TYO6_Wifi-TH_Location_Mapping_260602.xlsx's
+# Summary sheet, devices are currently configured to send to:
+#
+#     BMS server IP: 10.2.2.24, UDP/3184
+#
+# CONFIRMED: 10.2.2.24 IS the actual BMS server (Azbil — see the General
+# tab of Project_Horus_File_TYO6.xlsx) — live production infrastructure
+# the facility already depends on, not a replaceable legacy collector.
+#
+# (10.2.226.1 is a separate field — just the sensor subnet's default
+# gateway/router, not related to where the data actually goes.)
+#
+# DECISION: given 10.2.2.24 is live production BMS, do NOT reconfigure
+# the 71 already-provisioned devices and do NOT replace that server.
+# Recommended approach: ask the network team for a SPAN/port-mirror at
+# the switch this traffic passes through, mirroring a copy of UDP/3184
+# to GOP's Telegraf collector while the original copy keeps flowing to
+# the BMS unchanged. Zero risk to production monitoring, zero device
+# touching. This is also the best place to run the tcpdump capture below
+# — a mirror port sees the exact same traffic Azbil is already ingesting.
+# =========================================================================
+
+# =========================================================================
+# STILL OPEN: RLE WIFI-TH UDP payload format is not publicly documented.
+# Do NOT assume JSON.
+#
+# UPDATE: this just got much easier. Whoever manages 10.2.2.24 (or, once
+# set up, the SPAN/mirror port above) can run:
+#
+#   sudo tcpdump -i <interface> udp port 3184 -X -c 5
+#
+# right there, with -X to print hex+ASCII, and get a real sample without
+# waiting on RLE support. Send me the output and I'll write the actual
+# Telegraf parser.
+# =========================================================================
+
+# =========================================================================
+# CORRECTED: device wake interval is 15 minutes (900s), per this file's
+# Summary sheet ("Wake [minutes]: 15") — NOT the 3-hour/10800s figure
+# from the General tab of the other mapping file, which was wrong for
+# this purpose. prometheus-rules/th-sensor-staleness.yaml has been
+# updated to alert at 30min/1h instead of 6h/12h.
+# =========================================================================

@@ -1,0 +1,36 @@
+# Exposes Loki's raw query API at:
+#   loki.tyo7.digitaledgedc.net
+# NOT a UI — Loki has no web frontend of its own. Grafana's Explore tab
+# (already wired in grafana-values.yaml) is the normal way to browse logs.
+# This is for debugging with curl only.
+
+
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: loki-auth
+  namespace: gop-loki
+spec:
+  basicAuth:
+    secret: loki-basicauth
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: loki-ingress
+  namespace: gop-loki
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: gop-loki-loki-auth@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: loki.tyo7.digitaledgedc.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: loki
+                port:
+                  number: 3100

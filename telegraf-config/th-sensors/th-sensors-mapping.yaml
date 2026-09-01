@@ -1,0 +1,128 @@
+# ============================================================================
+# telegraf-th-sensor-map
+# ============================================================================
+# The single source of truth for every TH sensor. Onboarding a new sensor
+# is: add one row here, `kubectl apply`, `rollout restart`. Nothing else
+# changes — no new TOML block, no manual iptables command, no Service edit.
+#
+# Built from the full 150-row mapping file, deduplicated: that file lists
+# each physical sensor TWICE (once for its temp point, once for its
+# humidity point) because that's how the asset-tracking system labels
+# the two logical readings — but it's the same 75 physical devices, each
+# sending ONE packet containing both temperature AND humidity together
+
+# DERIVED FROM PROJECT HORUS TYO6 FILE
+
+#
+# Columns:
+#   ip                     — sensor's real source IP (mapping file col A)
+#   internal_listener_port — NOT a real network port. Every sensor still
+#                            sends to 3184 on the wire — same as the
+#                            mapping file, same as the firewall rule,
+#                            nothing about that changes. This value only
+#                            exists AFTER the packet is already inside the
+#                            pod: iptables silently redirects it here so a
+#                            dedicated socket_listener block can tag it
+#                            with the right sensor_ip. 3184 itself is
+#                            reserved for whichever one sensor needs no
+#                            redirect (currently .177, since it was
+#                            already live before this scheme existed) —
+#                            every other sensor gets a unique value from
+#                            3185 up. Never appears on any Service,
+#                            firewall rule, or in the mapping file itself
+#                            — see file 07's comments for why the Service
+#                            only ever exposes 3184.
+#   provider_tag_temp      — mapping file's point ID for this sensor's
+#                            temperature reading (col F, *_temp1 rows)
+#   provider_tag_hum       — mapping file's point ID for this sensor's
+#                            humidity reading (col F, *_hum1 rows)
+#   equipment_name         — mapping file column H (identical across both
+#                            source rows for a given IP, as expected —
+#                            same physical device)
+#   location                — mapping file column K (also identical
+#                            across both source rows per IP)
+# ============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telegraf-th-sensor-map
+  namespace: gop-telegraf
+data:
+  sensors.csv: |
+    ip,internal_listener_port,provider_tag_temp,provider_tag_hum,equipment_name,location
+    10.2.226.171,3185,TYO6/ROW/101/cold_aisle_temp1,TYO6/ROW/101/cold_aisle_hum1,TYO6-1-DH-TH-1,TYO6-1-1
+    10.2.226.172,3186,TYO6/ROW/102/cold_aisle_temp1,TYO6/ROW/102/cold_aisle_hum1,TYO6-1-DH-TH-2,TYO6-1-1
+    10.2.226.173,3187,TYO6/ROW/104/cold_aisle_temp1,TYO6/ROW/104/cold_aisle_hum1,TYO6-1-DH-TH-3,TYO6-1-1
+    10.2.226.174,3188,TYO6/ROW/106/cold_aisle_temp1,TYO6/ROW/106/cold_aisle_hum1,TYO6-1-DH-TH-4,TYO6-1-1
+    10.2.226.175,3189,TYO6/ROW/108/cold_aisle_temp1,TYO6/ROW/108/cold_aisle_hum1,TYO6-1-DH-TH-5,TYO6-1-1
+    10.2.226.176,3190,TYO6/ROW/109/cold_aisle_temp1,TYO6/ROW/109/cold_aisle_hum1,TYO6-1-DH-TH-6,TYO6-1-2
+    10.2.226.177,3184,TYO6/ROW/110/cold_aisle_temp1,TYO6/ROW/110/cold_aisle_hum1,TYO6-1-DH-TH-7,TYO6-1-2
+    10.2.226.178,3191,TYO6/ROW/112/cold_aisle_temp1,TYO6/ROW/112/cold_aisle_hum1,TYO6-1-DH-TH-8,TYO6-1-2
+    10.2.226.179,3192,TYO6/ROW/114/cold_aisle_temp1,TYO6/ROW/114/cold_aisle_hum1,TYO6-1-DH-TH-9,TYO6-1-2
+    10.2.226.180,3193,TYO6/ROW/116/cold_aisle_temp1,TYO6/ROW/116/cold_aisle_hum1,TYO6-1-DH-TH-10,TYO6-1-2
+    10.2.226.181,3194,TYO6/ROW/117/cold_aisle_temp1,TYO6/ROW/117/cold_aisle_hum1,TYO6-1-DH-TH-11,TYO6-1-3
+    10.2.226.182,3195,TYO6/ROW/118/cold_aisle_temp1,TYO6/ROW/118/cold_aisle_hum1,TYO6-1-DH-TH-12,TYO6-1-3
+    10.2.226.183,3196,TYO6/ROW/120/cold_aisle_temp1,TYO6/ROW/120/cold_aisle_hum1,TYO6-1-DH-TH-13,TYO6-1-3
+    10.2.226.184,3197,TYO6/ROW/122/cold_aisle_temp1,TYO6/ROW/122/cold_aisle_hum1,TYO6-1-DH-TH-14,TYO6-1-3
+    10.2.226.185,3198,TYO6/ROW/124/cold_aisle_temp1,TYO6/ROW/124/cold_aisle_hum1,TYO6-1-DH-TH-15,TYO6-1-3
+    10.2.226.186,3199,TYO6/ROW/201/cold_aisle_temp1,TYO6/ROW/201/cold_aisle_hum1,TYO6-2-DH-TH-1,TYO6-2-1
+    10.2.226.187,3200,TYO6/ROW/202/cold_aisle_temp1,TYO6/ROW/202/cold_aisle_hum1,TYO6-2-DH-TH-2,TYO6-2-1
+    10.2.226.188,3201,TYO6/ROW/204/cold_aisle_temp1,TYO6/ROW/204/cold_aisle_hum1,TYO6-2-DH-TH-3,TYO6-2-1
+    10.2.226.189,3202,TYO6/ROW/206/cold_aisle_temp1,TYO6/ROW/206/cold_aisle_hum1,TYO6-2-DH-TH-4,TYO6-2-1
+    10.2.226.190,3203,TYO6/ROW/208/cold_aisle_temp1,TYO6/ROW/208/cold_aisle_hum1,TYO6-2-DH-TH-5,TYO6-2-1
+    10.2.226.191,3204,TYO6/ROW/209/cold_aisle_temp1,TYO6/ROW/209/cold_aisle_hum1,TYO6-2-DH-TH-6,TYO6-2-2
+    10.2.226.192,3205,TYO6/ROW/210/cold_aisle_temp1,TYO6/ROW/210/cold_aisle_hum1,TYO6-2-DH-TH-7,TYO6-2-2
+    10.2.226.193,3206,TYO6/ROW/212/cold_aisle_temp1,TYO6/ROW/212/cold_aisle_hum1,TYO6-2-DH-TH-8,TYO6-2-2
+    10.2.226.194,3207,TYO6/ROW/214/cold_aisle_temp1,TYO6/ROW/214/cold_aisle_hum1,TYO6-2-DH-TH-9,TYO6-2-2
+    10.2.226.195,3208,TYO6/ROW/216/cold_aisle_temp1,TYO6/ROW/216/cold_aisle_hum1,TYO6-2-DH-TH-10,TYO6-2-2
+    10.2.226.196,3209,TYO6/ROW/217/cold_aisle_temp1,TYO6/ROW/217/cold_aisle_hum1,TYO6-2-DH-TH-11,TYO6-2-3
+    10.2.226.197,3210,TYO6/ROW/218/cold_aisle_temp1,TYO6/ROW/218/cold_aisle_hum1,TYO6-2-DH-TH-12,TYO6-2-3
+    10.2.226.198,3211,TYO6/ROW/220/cold_aisle_temp1,TYO6/ROW/220/cold_aisle_hum1,TYO6-2-DH-TH-13,TYO6-2-3
+    10.2.226.199,3212,TYO6/ROW/222/cold_aisle_temp1,TYO6/ROW/222/cold_aisle_hum1,TYO6-2-DH-TH-14,TYO6-2-3
+    10.2.226.200,3213,TYO6/ROW/224/cold_aisle_temp1,TYO6/ROW/224/cold_aisle_hum1,TYO6-2-DH-TH-15,TYO6-2-3
+    10.2.226.201,3214,TYO6/ROW/225/cold_aisle_temp1,TYO6/ROW/225/cold_aisle_hum1,TYO6-2-DH-TH-16,TYO6-2-4
+    10.2.226.202,3215,TYO6/ROW/226/cold_aisle_temp1,TYO6/ROW/226/cold_aisle_hum1,TYO6-2-DH-TH-17,TYO6-2-4
+    10.2.226.203,3216,TYO6/ROW/228/cold_aisle_temp1,TYO6/ROW/228/cold_aisle_hum1,TYO6-2-DH-TH-18,TYO6-2-4
+    10.2.226.204,3217,TYO6/ROW/230/cold_aisle_temp1,TYO6/ROW/230/cold_aisle_hum1,TYO6-2-DH-TH-19,TYO6-2-4
+    10.2.226.205,3218,TYO6/ROW/232/cold_aisle_temp1,TYO6/ROW/232/cold_aisle_hum1,TYO6-2-DH-TH-20,TYO6-2-4
+    10.2.226.206,3219,TYO6/ROW/301/cold_aisle_temp1,TYO6/ROW/301/cold_aisle_hum1,TYO6-3-DH-TH-1,TYO6-3-1
+    10.2.226.207,3220,TYO6/ROW/302/cold_aisle_temp1,TYO6/ROW/302/cold_aisle_hum1,TYO6-3-DH-TH-2,TYO6-3-1
+    10.2.226.208,3221,TYO6/ROW/304/cold_aisle_temp1,TYO6/ROW/304/cold_aisle_hum1,TYO6-3-DH-TH-3,TYO6-3-1
+    10.2.226.209,3222,TYO6/ROW/306/cold_aisle_temp1,TYO6/ROW/306/cold_aisle_hum1,TYO6-3-DH-TH-4,TYO6-3-1
+    10.2.226.210,3223,TYO6/ROW/308/cold_aisle_temp1,TYO6/ROW/308/cold_aisle_hum1,TYO6-3-DH-TH-5,TYO6-3-1
+    10.2.226.211,3224,TYO6/ROW/309/cold_aisle_temp1,TYO6/ROW/309/cold_aisle_hum1,TYO6-3-DH-TH-6,TYO6-3-2
+    10.2.226.212,3225,TYO6/ROW/310/cold_aisle_temp1,TYO6/ROW/310/cold_aisle_hum1,TYO6-3-DH-TH-7,TYO6-3-2
+    10.2.226.213,3226,TYO6/ROW/312/cold_aisle_temp1,TYO6/ROW/312/cold_aisle_hum1,TYO6-3-DH-TH-8,TYO6-3-2
+    10.2.226.214,3227,TYO6/ROW/314/cold_aisle_temp1,TYO6/ROW/314/cold_aisle_hum1,TYO6-3-DH-TH-9,TYO6-3-2
+    10.2.226.215,3228,TYO6/ROW/316/cold_aisle_temp1,TYO6/ROW/316/cold_aisle_hum1,TYO6-3-DH-TH-10,TYO6-3-2
+    10.2.226.216,3229,TYO6/ROW/317/cold_aisle_temp1,TYO6/ROW/317/cold_aisle_hum1,TYO6-3-DH-TH-11,TYO6-3-3
+    10.2.226.217,3230,TYO6/ROW/318/cold_aisle_temp1,TYO6/ROW/318/cold_aisle_hum1,TYO6-3-DH-TH-12,TYO6-3-3
+    10.2.226.218,3231,TYO6/ROW/320/cold_aisle_temp1,TYO6/ROW/320/cold_aisle_hum1,TYO6-3-DH-TH-13,TYO6-3-3
+    10.2.226.219,3232,TYO6/ROW/322/cold_aisle_temp1,TYO6/ROW/322/cold_aisle_hum1,TYO6-3-DH-TH-14,TYO6-3-3
+    10.2.226.220,3233,TYO6/ROW/324/cold_aisle_temp1,TYO6/ROW/324/cold_aisle_hum1,TYO6-3-DH-TH-15,TYO6-3-3
+    10.2.226.221,3234,TYO6/ROW/325/cold_aisle_temp1,TYO6/ROW/325/cold_aisle_hum1,TYO6-3-DH-TH-16,TYO6-3-4
+    10.2.226.222,3235,TYO6/ROW/326/cold_aisle_temp1,TYO6/ROW/326/cold_aisle_hum1,TYO6-3-DH-TH-17,TYO6-3-4
+    10.2.226.223,3236,TYO6/ROW/328/cold_aisle_temp1,TYO6/ROW/328/cold_aisle_hum1,TYO6-3-DH-TH-18,TYO6-3-4
+    10.2.226.224,3237,TYO6/ROW/330/cold_aisle_temp1,TYO6/ROW/330/cold_aisle_hum1,TYO6-3-DH-TH-19,TYO6-3-4
+    10.2.226.225,3238,TYO6/ROW/332/cold_aisle_temp1,TYO6/ROW/332/cold_aisle_hum1,TYO6-3-DH-TH-20,TYO6-3-4
+    10.2.226.226,3239,TYO6/ROW/401/cold_aisle_temp1,TYO6/ROW/401/cold_aisle_hum1,TYO6-4-DH-TH-1,TYO6-4-1
+    10.2.226.227,3240,TYO6/ROW/402/cold_aisle_temp1,TYO6/ROW/402/cold_aisle_hum1,TYO6-4-DH-TH-2,TYO6-4-1
+    10.2.226.228,3241,TYO6/ROW/404/cold_aisle_temp1,TYO6/ROW/404/cold_aisle_hum1,TYO6-4-DH-TH-3,TYO6-4-1
+    10.2.226.229,3242,TYO6/ROW/406/cold_aisle_temp1,TYO6/ROW/406/cold_aisle_hum1,TYO6-4-DH-TH-4,TYO6-4-1
+    10.2.226.230,3243,TYO6/ROW/408/cold_aisle_temp1,TYO6/ROW/408/cold_aisle_hum1,TYO6-4-DH-TH-5,TYO6-4-1
+    10.2.226.231,3244,TYO6/ROW/409/cold_aisle_temp1,TYO6/ROW/409/cold_aisle_hum1,TYO6-4-DH-TH-6,TYO6-4-2
+    10.2.226.232,3245,TYO6/ROW/410/cold_aisle_temp1,TYO6/ROW/410/cold_aisle_hum1,TYO6-4-DH-TH-7,TYO6-4-2
+    10.2.226.233,3246,TYO6/ROW/412/cold_aisle_temp1,TYO6/ROW/412/cold_aisle_hum1,TYO6-4-DH-TH-8,TYO6-4-2
+    10.2.226.234,3247,TYO6/ROW/414/cold_aisle_temp1,TYO6/ROW/414/cold_aisle_hum1,TYO6-4-DH-TH-9,TYO6-4-2
+    10.2.226.235,3248,TYO6/ROW/416/cold_aisle_temp1,TYO6/ROW/416/cold_aisle_hum1,TYO6-4-DH-TH-10,TYO6-4-2
+    10.2.226.236,3249,TYO6/ROW/417/cold_aisle_temp1,TYO6/ROW/417/cold_aisle_hum1,TYO6-4-DH-TH-11,TYO6-4-3
+    10.2.226.237,3250,TYO6/ROW/418/cold_aisle_temp1,TYO6/ROW/418/cold_aisle_hum1,TYO6-4-DH-TH-12,TYO6-4-3
+    10.2.226.238,3251,TYO6/ROW/420/cold_aisle_temp1,TYO6/ROW/420/cold_aisle_hum1,TYO6-4-DH-TH-13,TYO6-4-3
+    10.2.226.239,3252,TYO6/ROW/422/cold_aisle_temp1,TYO6/ROW/422/cold_aisle_hum1,TYO6-4-DH-TH-14,TYO6-4-3
+    10.2.226.240,3253,TYO6/ROW/424/cold_aisle_temp1,TYO6/ROW/424/cold_aisle_hum1,TYO6-4-DH-TH-15,TYO6-4-3
+    10.2.226.241,3254,TYO6/ROW/425/cold_aisle_temp1,TYO6/ROW/425/cold_aisle_hum1,TYO6-4-DH-TH-16,TYO6-4-4
+    10.2.226.242,3255,TYO6/ROW/426/cold_aisle_temp1,TYO6/ROW/426/cold_aisle_hum1,TYO6-4-DH-TH-17,TYO6-4-4
+    10.2.226.243,3256,TYO6/ROW/428/cold_aisle_temp1,TYO6/ROW/428/cold_aisle_hum1,TYO6-4-DH-TH-18,TYO6-4-4
+    10.2.226.244,3257,TYO6/ROW/430/cold_aisle_temp1,TYO6/ROW/430/cold_aisle_hum1,TYO6-4-DH-TH-19,TYO6-4-4
+    10.2.226.245,3258,TYO6/ROW/432/cold_aisle_temp1,TYO6/ROW/432/cold_aisle_hum1,TYO6-4-DH-TH-20,TYO6-4-4

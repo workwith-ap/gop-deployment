@@ -1,0 +1,13 @@
+# TYO7's Loki override. Same pattern as every other site's <dc>-loki.yaml
+# — every site has one, always, with explicit content, no exceptions.
+#
+# accessKeyId/secretAccessKey set EXPLICITLY here, not just via the
+# loki-s3-credentials Secret 
+
+
+loki:
+  storage:
+    s3:
+      endpoint: seaweedfs-s3.tyo7.digitaledgedc.net
+      accessKeyId: 0e8feefc38a33dc02fd074a06117840a
+      secretAccessKey: 05742751aa5701fb568eece0c13ff85ae3aed9e9bef216d098421f333dc556b1

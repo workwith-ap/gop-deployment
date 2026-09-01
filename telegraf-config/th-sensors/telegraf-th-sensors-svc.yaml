@@ -1,0 +1,36 @@
+# ============================================================================
+# telegraf-th-sensor-udp-tyo7
+# ============================================================================
+# The ONLY externally-exposed port this Service will ever need is 3184 —
+# regardless of how many sensors exist. Every sensor physically sends to
+# .51:3184 on the wire; 
+#
+# externalTrafficPolicy: Local preserves the real sensor source IP
+# (default "Cluster" policy would SNAT it away, which would break the
+# iptables PREROUTING rules — they match on real source IP). Safe with
+# a single-replica Deployment: MetalLB's L2 speaker only announces the
+# VIP from a node with a ready local endpoint.
+# ============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: telegraf-th-sensor-udp-tyo7
+  namespace: gop-telegraf
+  labels:
+    app.kubernetes.io/name: telegraf
+    app.kubernetes.io/instance: telegraf-tyo7-th-sensors
+    role: th-sensor-collector
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: 10.2.218.51
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: telegraf
+    app.kubernetes.io/instance: telegraf-tyo7-th-sensors
+  ports:
+    - name: th-sensor-udp
+      port: 3184
+      targetPort: 3184
+      protocol: UDP

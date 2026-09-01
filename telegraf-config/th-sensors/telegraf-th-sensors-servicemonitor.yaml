@@ -1,0 +1,35 @@
+# ============================================================================
+# telegraf-th-sensor-servicemonitor
+# ============================================================================
+# Registers telegraf-tyo7-th-sensors as a Prometheus scrape target via the
+# Prometheus Operator. Without this, Telegraf can be exposing perfectly
+# correct data on :9273/metrics and Prometheus will never know to look —
+# which is exactly what was happening: th_sensor_reading_* was visible
+# via `wget localhost:9273/metrics` inside the pod the whole time, but
+# absent from every Prometheus query, because no ServiceMonitor existed
+# to tell Prometheus this Service was there.
+#
+# targetPort (9273) is used instead of a named port on the Service — this
+# avoids needing to look up whatever this specific Helm chart happened to
+# name that port, and references the container port directly instead.
+#
+# This is a SEPARATE scrape target from the original telegraf-tyo7
+# (SNMP/OPC-UA) pod — each Telegraf release needs its own ServiceMonitor,
+# same as each needed its own Service after the BMS/network split.
+# ============================================================================
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: telegraf-tyo7-th-sensors
+  namespace: gop-prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: telegraf-tyo7-th-sensors
+  namespaceSelector:
+    matchNames: ["gop-telegraf"]
+  endpoints:
+    - targetPort: 9273
+      path: /metrics
+      interval: 30s

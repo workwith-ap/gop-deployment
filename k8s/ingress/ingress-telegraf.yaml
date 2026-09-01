@@ -1,0 +1,37 @@
+# Exposes TYO7's Telegraf /metrics at:
+#   http://telegraf.tyo7.digitaledgedc.net
+#
+# NOT a UI — raw Prometheus-format /metrics text, the same thing
+# Prometheus itself scrapes. Optional; nothing breaks without it.
+#
+# Create telegraf-basicauth Secret FIRST — see RUNBOOK.md Step 5.
+
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: telegraf-auth
+  namespace: gop-telegraf
+spec:
+  basicAuth:
+    secret: telegraf-basicauth
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: telegraf-tyo7-ingress
+  namespace: gop-telegraf
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: gop-telegraf-telegraf-auth@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: telegraf.tyo7.digitaledgedc.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: telegraf-tyo7
+                port:
+                  number: 9273

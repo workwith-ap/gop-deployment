@@ -1,0 +1,38 @@
+# Staleness alert for RLE WIFI-TH sensors.
+#
+# These are one-way, no-ack, battery-powered UDP transmitters on a ~3h
+# interval (10800s, per TYO6's General tab). A dead battery or dropped
+# WiFi association produces silence, not an error — Prometheus will just
+# keep serving the last known value forever unless we watch for staleness
+# explicitly. Threshold is 2x the expected interval to allow for one
+# missed cycle before paging.
+
+groups:
+  - name: th-sensor-staleness
+    rules:
+      - alert: THSensorStale
+        expr: time() - th_reading_last_seen > 1800s   #polling
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "TH sensor {{ $labels.sensor_id }} at {{ $labels.dc }} hasn't reported in over 6h"
+          description: >
+            No reading from {{ $labels.sensor_id }} ({{ $labels.dc }}) in
+            over 2x its expected 3h transmit interval. Likely dead
+            battery, WiFi drop, or device failure — this sensor is
+            one-way UDP with no ack, so there's no other signal.
+            Cross-reference equipment_name in the site's Mapping File
+            to get the physical rack/row location.
+
+      - alert: THSensorStaleCritical
+        expr: time() - th_reading_last_seen > 3600s   #polling
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "TH sensor {{ $labels.sensor_id }} at {{ $labels.dc }} silent for 12h+"
+          description: >
+            Escalated from THSensorStale — over 4 missed transmit cycles.
+            Treat as a confirmed monitoring gap for this rack/row, not
+            just a flaky reading.

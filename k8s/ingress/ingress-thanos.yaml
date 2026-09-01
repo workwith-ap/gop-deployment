@@ -1,0 +1,38 @@
+# Exposes Thanos Query at:
+#   http://thanos-tyo.global.digitaledgedc.net
+#
+# "global" naming tier — Thanos is the cross-DC aggregator by design, so
+# even though this instance runs in TYO7, the data it represents is
+# global, not regional. Will pair with thanos-sel.global.digitaledgedc.net
+# once Seoul exists.
+#
+
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: thanos-auth
+  namespace: gop-thanos
+spec:
+  basicAuth:
+    secret: thanos-basicauth
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: thanos-query-ingress
+  namespace: gop-thanos
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: gop-thanos-thanos-auth@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: thanos-tyo.global.digitaledgedc.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: thanos-query
+                port:
+                  number: 9090

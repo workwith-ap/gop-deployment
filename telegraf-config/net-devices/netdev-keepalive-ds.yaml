@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: egress-keepalived-snmp
+  namespace: gop-telegraf
+spec:
+  # Allows Kubernetes to replace all pods at once during updates
+  # preventing the rollout from getting stuck on BACKUP nodes
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 100%
+  selector:
+    matchLabels: {app: egress-keepalived-snmp}
+  template:
+    metadata:
+      labels: {app: egress-keepalived-snmp}
+    spec:
+      hostNetwork: true
+      containers:
+        - name: keepalived
+          image: debian:bookworm-slim
+          env:
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              apt-get update
+              apt-get install -y --no-install-recommends keepalived iptables socat
+              cp /config/notify.sh /etc/keepalived/notify.sh
+              chmod +x /etc/keepalived/notify.sh
+              /config/render-config.sh
+              exec keepalived --dont-fork --log-console --use-file /etc/keepalived/keepalived.conf
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN", "NET_RAW"]
+          # Checks live interface state — ONLY MASTER reports 1/1
+          readinessProbe:            
+            exec:
+              command: ["sh", "-c", "ip -o addr show enp6s18 | grep -q '10.2.218.53'"]
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            failureThreshold: 1
+          volumeMounts:
+            - {name: config, mountPath: /config}
+          ports:
+            - {containerPort: 16005, name: snmp-dev5, protocol: UDP}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {memory: 128Mi}
+      volumes:
+        - name: config
+          configMap:
+            name: egress-keepalived-snmp-config
+            defaultMode: 0755

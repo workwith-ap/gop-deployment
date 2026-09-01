@@ -1,0 +1,75 @@
+# Postgres for Grafana's HA requirement — 2+ Grafana replicas need a
+# shared database instead of each pod having its own local SQLite file
+# (which is what was silently breaking dashboard persistence and
+# causing Multi-Attach errors before this).
+#
+#
+# Official postgres image — not Bitnami (see the earlier discussion in
+# this build about Bitnami's 2025 image-supply changes).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: grafana-postgres
+  namespace: gop-grafana
+spec:
+  serviceName: grafana-postgres
+  replicas: 1
+  selector:
+    matchLabels: {app: grafana-postgres}
+  template:
+    metadata:
+      labels: {app: grafana-postgres}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999      # postgres image's built-in postgres user
+        runAsGroup: 999
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - {containerPort: 5432, name: postgres}
+          env:
+            - name: POSTGRES_DB
+              value: grafana
+            - name: POSTGRES_USER
+              value: grafana
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-postgres-credentials
+                  key: password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {memory: 1Gi}
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "grafana", "-d", "grafana"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "grafana", "-d", "grafana"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: longhorn
+        resources: {requests: {storage: 10Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-postgres
+  namespace: gop-grafana
+spec:
+  selector: {app: grafana-postgres}
+  ports:
+    - {name: postgres, port: 5432, targetPort: 5432}

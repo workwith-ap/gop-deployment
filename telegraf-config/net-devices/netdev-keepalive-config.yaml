@@ -1,0 +1,106 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: egress-keepalived-snmp-config
+  namespace: gop-telegraf
+data:
+  keepalived.conf.template: |
+    global_defs {
+        enable_script_security
+        script_user root
+    }
+
+    vrrp_instance VI_SNMP_EGRESS {
+      state BACKUP
+      interface enp6s18
+      virtual_router_id 53
+      priority __PRIORITY__
+      advert_int 1
+
+      garp_master_delay 1
+      garp_master_repeat 5
+      garp_master_refresh 5
+      garp_master_refresh_repeat 2
+
+      unicast_src_ip __NODE_IP__
+      unicast_peer {
+    __PEER_LIST__
+      }
+
+      virtual_ipaddress {
+        10.2.218.53/24 dev enp6s18
+      }
+
+      notify_master "/etc/keepalived/notify.sh MASTER"
+      notify_backup "/etc/keepalived/notify.sh BACKUP"
+      notify_fault  "/etc/keepalived/notify.sh FAULT"
+    }
+
+  render-config.sh: |
+    #!/bin/sh
+    WORKER_IPS="10.2.218.44 10.2.218.45 10.2.218.46 10.2.218.47"
+    
+    case "$NODE_IP" in
+      10.2.218.44) PRIORITY=150 ;;
+      10.2.218.45) PRIORITY=140 ;;
+      10.2.218.46) PRIORITY=130 ;;
+      10.2.218.47) PRIORITY=120 ;;
+      *) PRIORITY=100 ;;
+    esac
+
+    PEER_LIST=""
+    for ip in $WORKER_IPS; do
+      if [ "$ip" != "$NODE_IP" ]; then
+        PEER_LIST="${PEER_LIST}    ${ip}\n"
+      fi
+    done
+
+    sed -e "s/__NODE_IP__/${NODE_IP}/" -e "s/__PRIORITY__/${PRIORITY}/" /config/keepalived.conf.template > /tmp/keepalived.conf.stage1
+    awk -v peers="$PEER_LIST" '{gsub(/__PEER_LIST__/, peers); print}' /tmp/keepalived.conf.stage1 > /etc/keepalived/keepalived.conf
+
+    echo "$(date) rendered keepalived.conf for NODE_IP=${NODE_IP}, priority=${PRIORITY}"
+
+  notify.sh: |
+    #!/bin/sh
+    STATE="$1"
+    SNMP_PORT=161
+
+    case "$STATE" in
+      MASTER)
+        iptables -t nat -C POSTROUTING -p udp --dport "$SNMP_PORT" -j SNAT --to-source 10.2.218.53 2>/dev/null \
+          || iptables -t nat -A POSTROUTING -p udp --dport "$SNMP_PORT" -j SNAT --to-source 10.2.218.53
+        
+        # Start socat proxies when becoming MASTER
+        /bin/sh /config/start-proxies.sh &
+        
+        touch /tmp/ready
+        echo "$(date) MASTER — SNAT ensured, proxies started, marked ready"
+        ;;
+      BACKUP|FAULT)
+        iptables -t nat -D POSTROUTING -p udp --dport "$SNMP_PORT" -j SNAT --to-source 10.2.218.53 2>/dev/null
+        
+        # Stop proxies on step-down
+        pkill -f socat 2>/dev/null || true
+        
+        rm -f /tmp/ready
+        echo "$(date) $STATE — SNAT removed, proxies stopped, marked not-ready"
+        ;;
+    esac
+
+  start-proxies.sh: |
+    #!/bin/sh
+    VIP="10.2.218.53"
+
+    pkill -f socat 2>/dev/null || true
+
+    # Scalable device mappings (LISTEN_PORT:TARGET_IP:TARGET_PORT)
+    MAPPINGS="
+    16005:10.2.222.5:161
+    "
+
+    echo "$MAPPINGS" | grep -v '^$' | while IFS=":" read -r LISTEN_PORT TARGET_IP TARGET_PORT; do
+      echo "$(date) Starting proxy: :${LISTEN_PORT} -> ${TARGET_IP}:${TARGET_PORT} bound to ${VIP}"
+      socat UDP-LISTEN:${LISTEN_PORT},bind=${VIP},fork,reuseaddr UDP:${TARGET_IP}:${TARGET_PORT},bind=${VIP} &
+    done
+
+    echo "$(date) All SNMP proxy listeners active and listening"

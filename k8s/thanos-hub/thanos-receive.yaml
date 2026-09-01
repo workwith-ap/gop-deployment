@@ -1,0 +1,104 @@
+#--receive.hashrings-file is for replication factor and knowing it's peers
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: thanos-receive-hashring
+  namespace: gop-thanos
+data:
+  hashring.json: |
+    [
+      {
+        "hashring": "default",
+        "endpoints": [
+          "thanos-receive-0.thanos-receive-headless.gop-thanos.svc.cluster.local:10901",
+          "thanos-receive-1.thanos-receive-headless.gop-thanos.svc.cluster.local:10901",
+          "thanos-receive-2.thanos-receive-headless.gop-thanos.svc.cluster.local:10901"
+        ]
+      }
+    ]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: thanos-receive
+  namespace: gop-thanos
+spec:
+  serviceName: thanos-receive-headless
+  replicas: 3
+  selector:
+    matchLabels: {app: thanos-receive}
+  template:
+    metadata:
+      labels: {app: thanos-receive}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+        - name: thanos-receive
+          image: quay.io/thanos/thanos:v0.36.1
+          args:
+            - receive
+            - --tsdb.path=/data
+            - --tsdb.retention=2h #change to one month
+            - --grpc-address=0.0.0.0:10901
+            - --http-address=0.0.0.0:10902
+            - --remote-write.address=0.0.0.0:19291
+            - --objstore.config-file=/etc/thanos/objstore.yml
+            - --label=replica="$(POD_NAME)"
+            - --receive.replication-factor=2
+            - --receive.local-endpoint=$(POD_NAME).thanos-receive-headless.gop-thanos.svc.cluster.local:10901
+            - --receive.hashrings-file=/etc/thanos/hashring/hashring.json
+          env:
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+          ports:
+            - {containerPort: 10901, name: grpc}
+            - {containerPort: 10902, name: http}
+            - {containerPort: 19291, name: remote-write}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: objstore-config, mountPath: /etc/thanos}
+            - {name: hashring-config, mountPath: /etc/thanos/hashring}
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {memory: 2Gi}
+      volumes:
+        - name: objstore-config
+          secret: {secretName: thanos-objstore-config}
+        - name: hashring-config
+          configMap: {name: thanos-receive-hashring}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: longhorn
+        resources: {requests: {storage: 20Gi}}
+---
+# Headless — used for StatefulSet pod DNS + inter-receive gRPC (hashring/replication)
+apiVersion: v1
+kind: Service
+metadata:
+  name: thanos-receive-headless
+  namespace: gop-thanos
+spec:
+  clusterIP: None
+  selector: {app: thanos-receive}
+  ports:
+    - {name: grpc, port: 10901}
+    - {name: http, port: 10902}
+---
+# Regular ClusterIP — this is the endpoint every site's Prometheus remote_writes to
+apiVersion: v1
+kind: Service
+metadata:
+  name: thanos-receive
+  namespace: gop-thanos
+spec:
+  selector: {app: thanos-receive}
+  ports:
+    - {name: remote-write, port: 19291, targetPort: 19291}
+    - {name: grpc, port: 10901, targetPort: 10901}

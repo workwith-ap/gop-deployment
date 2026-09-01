@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: thanos-store
+  namespace: gop-thanos
+spec:
+  serviceName: thanos-store
+  replicas: 2
+  selector:
+    matchLabels: {app: thanos-store}
+  template:
+    metadata:
+      labels: {app: thanos-store}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+        - name: thanos-store
+          image: quay.io/thanos/thanos:v0.36.1
+          args:
+            - store
+            - --data-dir=/data
+            - --grpc-address=0.0.0.0:10901
+            - --http-address=0.0.0.0:10902
+            - --objstore.config-file=/etc/thanos/objstore.yml
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: objstore-config, mountPath: /etc/thanos}
+          resources:
+            requests: {cpu: 250m, memory: 1Gi}
+            limits: {memory: 2Gi}
+      volumes:
+        - name: objstore-config
+          secret: {secretName: thanos-objstore-config}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: longhorn
+        resources: {requests: {storage: 10Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: thanos-store
+  namespace: gop-thanos
+spec:
+  clusterIP: None   # headless — Query discovers both pods via DNS SRV
+  selector: {app: thanos-store}
+  ports:
+    - {name: grpc, port: 10901}

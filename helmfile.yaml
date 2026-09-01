@@ -1,0 +1,70 @@
+repositories:
+  - name: prometheus-community
+    url: https://prometheus-community.github.io/helm-charts
+  - name: grafana
+    url: https://grafana.github.io/helm-charts
+  - name: influxdata
+    url: https://helm.influxdata.com/
+
+# Thanos is NOT here — it's hand-rolled plain manifests in k8s/thanos-hub/,
+# namespace gop-thanos (no maintained official chart exists post-Bitnami;
+# see RUNBOOK.md Step 1). Apply those with kubectl, once, before anything below.
+#
+# Namespace-per-component, on purpose, for troubleshooting isolation:
+#   gop-thanos     — Thanos Receive/Store/Compactor/Query (hub only)
+#   gop-grafana    — Grafana (hub only)
+#   gop-prometheus — Prometheus (per DC)
+#   gop-telegraf   — Telegraf (per DC)
+
+environments:
+  hub:
+    values:
+      - values/base/grafana-values.yaml
+  tyo7:
+    values:
+      - values/base/telegraf-values.yaml
+      - values/base/prometheus-values.yaml
+      - values/sites/tyo7.yaml
+  jkt1:
+    values:
+      - values/base/telegraf-values.yaml
+      - values/base/prometheus-values.yaml
+      - values/sites/jkt1.yaml
+  tyo6:
+    values:
+      - values/base/telegraf-values.yaml
+      - values/base/prometheus-values.yaml
+      - values/sites/tyo6.yaml
+  # jkt2, tyo3, sel2, bom1, osa1, ...dc-04 ... dc-47: same three-line pattern.
+
+---
+releases:
+  - name: grafana
+    namespace: gop-grafana
+    chart: grafana/grafana
+    installed: '{{ eq .Environment.Name "hub" }}'
+    values:
+      - values/base/grafana-values.yaml
+
+  - name: loki
+    namespace: gop-loki
+    chart: grafana/loki
+    installed: '{{ eq .Environment.Name "hub" }}'
+    values:
+      - values/base/loki-values.yaml
+
+  - name: prometheus-{{ .Environment.Name }}
+    namespace: gop-prometheus
+    chart: prometheus-community/prometheus
+    installed: '{{ ne .Environment.Name "hub" }}'
+    values:
+      - values/base/prometheus-values.yaml
+      - values/sites/{{ .Environment.Name }}.yaml
+
+  - name: telegraf-{{ .Environment.Name }}
+    namespace: gop-telegraf
+    chart: influxdata/telegraf
+    installed: '{{ ne .Environment.Name "hub" }}'
+    values:
+      - values/base/telegraf-values.yaml
+      - values/sites/{{ .Environment.Name }}.yaml

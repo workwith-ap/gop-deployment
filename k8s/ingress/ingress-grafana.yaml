@@ -1,0 +1,29 @@
+# Exposes Grafana at:
+#   http://grafana-tyo.global.digitaledgedc.net
+#
+# Plain HTTP, matching this cluster's existing standard pattern (see
+# longhorn-ingress.yaml, seaweedfs-admin-ingress.yaml) — no TLS/cert-manager
+# for internal UIs on this private, Zscaler-gated network.
+#
+# NO TRAEFIK BASIC AUTH HERE — deliberately different from every other
+# app in k8s/ingress/. Grafana has its OWN login page 
+
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-ingress
+  namespace: gop-grafana
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: grafana-tyo.global.digitaledgedc.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 80

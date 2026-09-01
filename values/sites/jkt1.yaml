@@ -1,0 +1,23 @@
+# JKT1 — separate RKE2 cluster, pushes to the TYO7 hub over WAN via the
+# Traefik-exposed Thanos Receive ingress (plain HTTP + basic auth, matching
+# CLUSTER_EXPOSURE_STANDARD.md).
+
+server:
+  global:
+    external_labels:
+      dc: "jkt1"
+      region: "apac-sea"
+
+  remoteWrite:
+    - url: "http://gopadmin:PASSWORD_HERE@thanos-receive.tyo7.digitaledgedc.net/api/v1/receive"
+      queue_config:
+        max_samples_per_send: 5000
+        max_shards: 30
+        capacity: 10000
+      # if WAN latency to Tokyo causes remote_write backlog, raise
+      # capacity/max_shards here before anything else
+
+config:
+  global_tags:
+    dc: "jkt1"
+    site_name: "Jakarta DC1"

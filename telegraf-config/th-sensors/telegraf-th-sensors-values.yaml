@@ -1,0 +1,86 @@
+# ============================================================================
+# telegraf-tyo7-th-sensors — Helm values (NEW release, TH SENSOR ONLY)
+# ============================================================================# Split out from telegraf-tyo7 specifically so that a bad TH sensor-map
+# edit can no longer crash SNMP/OPC-UA collection alongside it. This
+# release owns: the init container that runs render-th-sensor-config.sh,
+# 75+ generated socket_listener blocks (one per sensor, on its own
+# port), and the battery/humidity/temperature scale processors.
+#
+# KEY NAMES confirmed against `helm show values influxdata/telegraf` —
+# this chart uses `initContainers` (not `extraInitContainers`) and
+# `mountPoints` for the main container's mounts (its own values.yaml
+# explicitly warns the older `volumeMounts` key won't work as expected).
+# The nested `volumeMounts` INSIDE the initContainers entry below is
+# correct as-is — that's a raw Kubernetes container spec templated in
+# verbatim, not a chart-specific key.
+#
+# expiration_interval is set to 20m (default is 60s) because Telegraf's
+# prometheus_client output DROPS a metric from /metrics entirely once
+# it's older than this — 60s was too short relative to the sensors'
+# real reporting cadence and caused Prometheus to miss scrapes. Confirm
+# actual sensor interval with the BMS engineer and tighten this once
+# known; 20m is a safe upper bound, not a tuned value.
+# ============================================================================
+
+image:
+  repository: telegraf
+  tag: "1.31-alpine"
+
+config:
+  outputs:
+    - prometheus_client:
+        listen: ":9273"
+        metric_version: 2
+        expiration_interval: "20m"
+
+initContainers:
+  - name: render-th-sensor-config
+    image: alpine:3.20
+    securityContext:
+      capabilities:
+        add: ["NET_ADMIN"]   # required to add the PREROUTING REDIRECT rules
+    command: ["/bin/sh", "-c"]
+    args:
+      - |
+        set -e
+        apk add --no-cache iptables >/dev/null
+        cp /config-static/*.conf /telegraf-d/
+        /scripts/render-th-sensor-config.sh
+    volumeMounts:
+      - name: th-sensor-static-config-vol
+        mountPath: /config-static
+      - name: th-sensor-map-vol
+        mountPath: /sensor-map
+      - name: th-sensor-render-script-vol
+        mountPath: /scripts
+      - name: telegraf-d-vol
+        mountPath: /telegraf-d
+
+volumes:
+  - name: th-sensor-static-config-vol
+    configMap:
+      name: telegraf-th-sensor-static-config      # processors.conf (file 03)
+  - name: th-sensor-map-vol
+    configMap:
+      name: telegraf-th-sensor-map         # sensors.csv (file 04)
+  - name: th-sensor-render-script-vol
+    configMap:
+      name: telegraf-th-sensor-render-script      # render-th-sensor-config.sh (file 05)
+      defaultMode: 0755                     # must be executable — it's run directly, not sourced
+  - name: telegraf-d-vol
+    emptyDir: {}                            # generated at pod startup, not persisted — regenerated every restart
+
+mountPoints:
+  - name: telegraf-d-vol
+    mountPath: /etc/telegraf/telegraf.d
+
+service:
+  enabled: true
+  type: ClusterIP   # separate /metrics scrape target from telegraf-tyo7 — add both to Prometheus scrape config
+
+resources:
+  requests:
+    cpu: "150m"       # slightly higher than the network release — 75+ listeners is heavier than 3
+    memory: "192Mi"
+  limits:
+    memory: "384Mi"

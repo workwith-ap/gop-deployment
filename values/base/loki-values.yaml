@@ -1,0 +1,88 @@
+# Loki — PER DC (namespace: gop-loki, one Helm release per site, e.g.
+# loki-tyo7, loki-jkt1 — see helmfile.yaml), each DC keeps its own logs in its own local
+# SeaweedFS bucket.
+
+# Grafana (hub, global) queries each DC's Loki as a separate datasource
+# instead — global ACCESS, local STORAGE.
+#
+# storage.s3.endpoint is deliberately OMITTED from this file entirely —
+# every DC's own values/sites/<dc>-loki.yaml is the ONLY place it ever
+# gets set (same pattern for every site, always two files: this shared
+# base + that DC's own small override — see values/sites/tyo7-loki.yaml
+# for what that looks like). Nothing DC-specific sits in this file.
+
+# Uses the SAME SeaweedFS bucket + scoped identity that's existed since
+# the SeaweedFS deployment (`loki` bucket, `loki-rw` identity, local to
+# each DC's own SeaweedFS cluster) — nothing new needed on the storage
+# side, since SeaweedFS was already per-DC from the start.
+
+loki:
+  auth_enabled: false   # single-tenant for now; revisit if multi-DC log
+                          # isolation becomes a requirement
+
+  commonConfig:
+    replication_factor: 1   # single-binary mode, matches replicaCount below
+
+  storage:
+    type: s3
+    bucketNames:
+      chunks: loki
+      ruler: loki
+      admin: loki
+    s3:
+      region: us-east-1        # SeaweedFS ignores this but the client requires a value
+      s3ForcePathStyle: true
+      insecure: true            # plain HTTP, 
+
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: s3
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+  limits_config:
+    retention_period: 17520h   # 2 years — business requirement
+
+  compactor:
+    retention_enabled: true
+    delete_request_store: s3   # REQUIRED alongside retention_enabled — Loki's
+                                 # own startup validation rejects the config
+                                 # without it ("compactor.delete-request-store
+                                 # should be configured when retention is
+                                 # enabled"). Same backend as storage.type
+                                 # above — reuses the existing S3-compatible
+                                 # SeaweedFS connection, no new credentials.
+
+deploymentMode: SingleBinary   # explicit — without this, the chart's
+                                # validation sees BOTH singleBinary AND
+                                # the SimpleScalable components (read/
+                                # write/backend) as active simultaneously
+                                # and refuses to install
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    storageClass: longhorn
+    size: 20Gi
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {memory: 1Gi}
+
+# Explicitly zeroed — these are the SimpleScalable-mode components,
+# not used in SingleBinary mode. Without this, they default to nonzero
+# replicas and trip the chart's validation.yaml check.
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# No ingress here — routed via loki.tyo7.digitaledgedc.net 
+gateway:
+  enabled: false

@@ -1,0 +1,37 @@
+# Exposes TYO7's Prometheus at:
+#   http://prometheus.tyo7.digitaledgedc.net
+#
+# TYO7 only — other DCs' Prometheus stays cluster-internal; Thanos Query
+# is the intended way to look at other sites, not exposing 47 separate
+# Prometheus UIs.
+
+
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: prometheus-auth
+  namespace: gop-prometheus
+spec:
+  basicAuth:
+    secret: prometheus-basicauth
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prometheus-tyo7-ingress
+  namespace: gop-prometheus
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: gop-prometheus-prometheus-auth@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: prometheus.tyo7.digitaledgedc.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus-tyo7-server
+                port:
+                  number: 80

@@ -1,0 +1,42 @@
+# ============================================================================
+# telegraf-th-sensor-static-config
+# ============================================================================
+# Holds the ONE piece of TH sensor config that isn't generated per-sensor:
+# processors.conf. Scale factors come from the WIFI-TH datasheet, not
+# per-device, so they don't belong in the CSV — they're the same for
+# every sensor of this model.
+#
+# Copied into /etc/telegraf/telegraf.d by the TH sensor init container
+# alongside the generated th-sensor-udp.conf (file 05/06). If you ever add a
+# second sensor model with different scaling, add a new namepass-scoped
+# [[processors.scale]] block here rather than a new file.
+# ============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telegraf-th-sensor-static-config
+  namespace: gop-telegraf
+data:
+  processors.conf: |
+    # temperature, humidity: raw units are deci-% / deci-°C per datasheet
+    # (value ÷ 10). Applies only to th_sensor_reading measurements — namepass
+    # scopes this so it never touches SNMP/OPC-UA fields of the same name
+    # if any ever exist.
+    [[processors.scale]]
+      namepass = ["th_sensor_reading"]
+      [[processors.scale.scaling]]
+        factor = 0.1
+        offset = 0.0
+        fields = ["temperature", "humidity"]
+
+    # battery_voltage: raw units are centivolts per datasheet (value ÷ 100).
+    # Separate block because the divisor differs from temp/humidity —
+    # processors.scale.scaling factor is not per-field, so fields with
+    # different divisors need their own [[processors.scale]] block.
+    [[processors.scale]]
+      namepass = ["th_sensor_reading"]
+      [[processors.scale.scaling]]
+        factor = 0.01
+        offset = 0.0
+        fields = ["battery_voltage"]

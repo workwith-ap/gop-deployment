@@ -1,0 +1,81 @@
+# Prometheus — deployed once per DC. Local, short-retention, single job:
+# scrape Telegraf. Durable storage is Thanos, not this instance.
+#
+# Site-specific fields (server.remoteWrite URL is fixed/shared, but
+# external_labels.dc and scrape target change per site) live in
+# values/sites/<dc>.yaml and get merged on top of this file.
+
+server:
+  retention: "6h"   # local buffer only — Thanos Receive holds the real history
+
+  global:
+    scrape_interval: 30s
+    evaluation_interval: 30s
+    # external_labels.dc is set per-site in values/sites/<dc>.yaml — this is
+    # the single label that makes cross-DC Grafana queries/dashboards work.
+
+  remoteWrite:
+    - url: "http://thanos-receive.gop-thanos.svc.cluster.local:19291/api/v1/receive"
+      # if the site's cluster is a genuinely separate cluster (not sharing
+      # cluster-local DNS with the hub), replace with the routable hub
+      # ingress URL instead, e.g. https://thanos-receive.tyo7.digitaledgedc.net/api/v1/receive
+      queue_config:
+        max_samples_per_send: 5000
+        max_shards: 30
+        capacity: 10000
+
+  persistentVolume:
+    enabled: true
+    storageClass: longhorn
+    size: 10Gi
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+# No ingress block here — routed via k8s/ingress/04-ingressroute-prometheus.yaml
+# (prometheus.tyo7.digitaledgedc.net). Do not enable this chart's native
+# ingress, or you'll get two competing routes with two different auth systems.
+
+# Scrape config: this chart is plain prometheus-community/prometheus, NOT
+# the Prometheus Operator — there is no CRD-based discovery here, no
+# ServiceMonitor. Every scrape target is a static_configs entry below,
+# added by hand. That also means: every time a new Telegraf release is
+# created (per-device-class split, new site, etc.), a job MUST be added
+# here manually — nothing auto-discovers it.
+#
+# TWO jobs now, not one — telegraf-tyo7 was split into a SNMP/OPC-UA
+# release and a TH-sensor release (see gop-telegraf's
+# CHANGES_AND_ARCHITECTURE.md), each with its own Service, so each needs
+# its own job here:
+#   - telegraf-tyo7            → SNMP + OPC-UA (17 PLCs, network device)
+#   - telegraf-tyo7-th-sensors → 75 TH sensors, CSV-generated config
+#
+# The previous single "telegraf-bms" job pointed at
+# telegraf-tyo7.gop-telegraf.svc.cluster.local:9273 — a Service that no
+# longer exists after the split. It was scraping nothing.
+serverFiles:
+  prometheus.yml:
+    scrape_configs:
+      - job_name: telegraf-tyo7
+        static_configs:
+          - targets: ["telegraf-tyo7.gop-telegraf.svc.cluster.local:9273"]
+        # NOTE: this target does not currently resolve — the telegraf-tyo7
+        # release itself is missing (no pod, no Service) as of this
+        # writing. This job is correct and should stay, but won't return
+        # data until that release is restored. Don't remove this job just
+        # because it's failing right now.
+
+      - job_name: telegraf-tyo7-th-sensors
+        static_configs:
+          - targets: ["telegraf-tyo7-th-sensors.gop-telegraf.svc.cluster.local:9273"]
+
+        # additional jobs (e.g. node-exporter, kube-state-metrics) can be
+        # appended here as GOP's scope grows — no chart change needed
+
+alertmanager:
+  enabled: false   # add later if/when per-site alerting is needed;
+                    # for now, alerting rules live centrally against Thanos Query

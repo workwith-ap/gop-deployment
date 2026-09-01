@@ -1,0 +1,55 @@
+# HARD RULE: replicas must stay at 1. Running 2+ compactors against the
+# same bucket corrupts blocks. This is a Deployment (not StatefulSet) on
+# purpose — no per-pod identity needed for a singleton.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: thanos-compactor
+  namespace: gop-thanos
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # never run 2 pods simultaneously, even during a rollout
+  selector:
+    matchLabels: {app: thanos-compactor}
+  template:
+    metadata:
+      labels: {app: thanos-compactor}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+        - name: thanos-compactor
+          image: quay.io/thanos/thanos:v0.36.1
+          args:
+            - compact
+            - --data-dir=/data
+            - --objstore.config-file=/etc/thanos/objstore.yml
+            - --retention.resolution-raw=30d
+            - --retention.resolution-5m=180d
+            - --retention.resolution-1h=2y
+            - --wait
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: objstore-config, mountPath: /etc/thanos}
+          resources:
+            requests: {cpu: 250m, memory: 1Gi}
+            limits: {memory: 4Gi}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: thanos-compactor-data}
+        - name: objstore-config
+          secret: {secretName: thanos-objstore-config}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: thanos-compactor-data
+  namespace: gop-thanos
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn
+  resources: {requests: {storage: 50Gi}}

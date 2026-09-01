@@ -1,0 +1,85 @@
+# Grafana — single pane of glass across all 47 DCs, datasource is Thanos
+# Query (metrics) + Loki (logs), never individual site Prometheus instances.
+#
+# AUTH: deliberately different from every other app in this stack.
+# not using middleware, only username and password
+
+replicas: 2
+
+# No local persistence needed anymore — Grafana's actual state lives in
+# Postgres now, not on a local volume. The old persistence:enabled:true
+# block (SQLite-backed) is intentionally removed.
+persistence:
+  enabled: false
+
+# Single shared credential for everyone, set explicitly — NOT the
+# chart's auto-generated random password but rather creatted
+admin:
+  existingSecret: grafana-admin-credentials
+  userKey: admin-user
+  passwordKey: admin-password
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Thanos
+        type: prometheus
+        access: proxy
+        url: http://thanos-query.gop-thanos.svc.cluster.local:9090
+        isDefault: true
+        jsonData:
+          timeInterval: "30s"
+      - name: Loki-TYO7
+        type: loki
+        access: proxy
+        # CONFIRMED service name "loki" via `kubectl -n gop-loki get svc`
+        
+        url: http://loki.gop-loki.svc.cluster.local:3100
+        # Grafana talks to Loki over the in-cluster Service, not through
+        # loki.tyo7.digitaledgedc.net (that ingress is for debugging with
+        # curl only — see k8s/ingress/06-loki-ingress.yaml).
+        #
+        # Loki is  per-DC (not centralized) — as more DCs come online,
+        # add one more datasource entry here 
+
+# postgres and grafana s3 secrets
+envValueFrom:
+  GF_DATABASE_PASSWORD:
+    secretKeyRef:
+      name: grafana-postgres-credentials
+      key: password
+  GF_EXTERNAL_IMAGE_STORAGE_S3_ACCESS_KEY:
+    secretKeyRef:
+      name: grafana-s3-credentials
+      key: access_key
+  GF_EXTERNAL_IMAGE_STORAGE_S3_SECRET_KEY:
+    secretKeyRef:
+      name: grafana-s3-credentials
+      key: secret_key
+
+
+grafana.ini:
+  database:
+    type: postgres
+    host: grafana-postgres.gop-grafana.svc.cluster.local:5432
+    name: grafana
+    user: grafana
+    ssl_mode: disable   # plain internal cluster traffic, matches this
+                          # cluster's existing no-TLS-for-internal pattern
+
+ # share as image feature?                        
+  external_image_storage:
+    provider: s3
+    bucket: grafana-exports
+    endpoint: http://seaweedfs.tyo7.digitaledgedc.net
+    path_style_access: true
+
+
+# Served at grafana-tyo.global.digitaledgedc.net — a "global" naming tier
+# a separate file for ingress is applied, not internal
+ingress:
+  enabled: false
+
+
+# Add new dashboards under dashboardProviders/dashboards as sensor coverage grows.

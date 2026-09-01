@@ -1,0 +1,34 @@
+# ClusterIP — internal only, Telegraf connects here instead of directly
+# to any PLC. This is the actual mechanism that solves the "route to
+# whichever pod currently holds .52" problem: Kubernetes Services only
+# ever forward to READY pods, and only the current VRRP MASTER is ready
+# (see 02-daemonset.yaml's readinessProbe + 01-configmap.yaml's
+# notify.sh). No custom routing logic anywhere — this is standard
+# Service behavior.
+
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: egress-proxy-opcua
+  namespace: gop-telegraf
+spec:
+  selector: {app: egress-keepalived-opcua}
+  ports:
+    - {name: plc060, port: 14060, targetPort: 14060}
+    - {name: plc061, port: 14061, targetPort: 14061}
+    - {name: plc062, port: 14062, targetPort: 14062}
+    - {name: plc066, port: 14066, targetPort: 14066}
+    - {name: plc067, port: 14067, targetPort: 14067}
+    - {name: plc068, port: 14068, targetPort: 14068}
+    - {name: plc072, port: 14072, targetPort: 14072}
+    - {name: plc073, port: 14073, targetPort: 14073}
+    - {name: plc074, port: 14074, targetPort: 14074}
+    - {name: plc080, port: 14080, targetPort: 14080}
+    - {name: plc081, port: 14081, targetPort: 14081}
+    - {name: plc082, port: 14082, targetPort: 14082}
+    - {name: plc083, port: 14083, targetPort: 14083}
+    - {name: plc084, port: 14084, targetPort: 14084}
+    - {name: plc088, port: 14088, targetPort: 14088}
+    - {name: plc089, port: 14089, targetPort: 14089}
+    - {name: plc090, port: 14090, targetPort: 14090}
