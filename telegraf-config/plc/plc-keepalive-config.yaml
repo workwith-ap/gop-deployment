@@ -161,7 +161,12 @@ data:
 
     echo "$MAPPINGS" | grep -v '^$' | while IFS=":" read -r LISTEN_PORT TARGET_IP TARGET_PORT; do
       echo "$(date) Starting proxy: :${LISTEN_PORT} -> ${TARGET_IP}:${TARGET_PORT} bound to ${VIP}"
-      socat TCP-LISTEN:${LISTEN_PORT},bind=${VIP},fork,reuseaddr TCP:${TARGET_IP}:${TARGET_PORT},bind=${VIP} &
+      # Dropping bind=${VIP} from the TCP-LISTEN clause makes socat listen on 0.0.0.0:${LISTEN_PORT}  
+      # reachable via both the node's primary IP (what the Service hits) and the VIP itself.
+      socat TCP-LISTEN:${LISTEN_PORT},fork,reuseaddr TCP:${TARGET_IP}:${TARGET_PORT},bind=${VIP} &
     done
 
     echo "$(date) all 17 PLC proxy listeners active and listening"
+
+
+   

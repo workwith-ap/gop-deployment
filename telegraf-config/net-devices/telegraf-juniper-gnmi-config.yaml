@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telegraf-juniper-gnmi-inputs
+  namespace: gop-telegraf
+data:
+  gnmi-inputs.conf: |
+    [[inputs.gnmi]]
+      addresses = ["egress-proxy-gnmi.gop-telegraf.svc.cluster.local:17005"]
+
+      # Credentials come from the Secret telegraf-juniper-gnmi-creds,
+      # injected as env vars by the Helm chart (envFromSecret).
+      username = "${GNMI_USER}"
+      password = "${GNMI_PASS}"
+
+      encoding = "proto"
+      redial = "10s"
+
+      ## TLS is NOT needed on this device (tested plaintext on 2026-10-06).
+      ## Enable only if a future device's gRPC service has TLS on.
+      # enable_tls = true
+      # insecure_skip_verify = true
+
+      ## Keep only physical-interface data. The /interfaces/interface subscription
+      ## also returns subinterface, ARP-neighbour and address data we don't want
+      ## in Prometheus. Verified path tag values in the 2026-10-06 test.
+      [inputs.gnmi.tagpass]
+        path = ["/interfaces/interface"]
+
+      ## Switch name label, so the gNMI dashboard can filter by switch the same
+      ## way the SNMP dashboard does (sysName). One Telegraf release = one switch.
+      [inputs.gnmi.tags]
+        device = "itcsw701.tyo7"
+
+      [[inputs.gnmi.subscription]]
+        name = "interfaces"
+        origin = "openconfig"
+        path = "/interfaces/interface"
+        subscription_mode = "sample"
+        sample_interval = "30s"
+
+      [[inputs.gnmi.subscription]]
+        name = "oper_status"
+        origin = "openconfig"
+        path = "/interfaces/interface/state/oper-status"
+        subscription_mode = "sample"
+        sample_interval = "30s"
+
+    [[processors.enum]]
+      [[processors.enum.mapping]]
+        fields = ["oper_status"]
+        ## Any state other than UP (LOWER_LAYER_DOWN, NOT_PRESENT, TESTING,
+        ## DORMANT, UNKNOWN) becomes 0. Without a default, those stay strings
+        ## and prometheus_client drops them, so the port disappears from the count.
+        default = 0
+        [processors.enum.mapping.value_mappings]
+          UP = 1
+          DOWN = 0

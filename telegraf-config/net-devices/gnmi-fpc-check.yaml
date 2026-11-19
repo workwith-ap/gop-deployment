@@ -1,0 +1,144 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gnmi-fpc-check-config
+  namespace: gop-telegraf
+data:
+  fpc0-counters.conf: |
+    [agent]
+      flush_interval = "5s"
+    [[inputs.gnmi]]
+      addresses = ["egress-proxy-gnmi.gop-telegraf.svc.cluster.local:17005"]
+      username = "${GNMI_USER}"
+      password = "${GNMI_PASS}"
+      encoding = "proto"
+      redial = "10s"
+      [[inputs.gnmi.subscription]]
+        name = "fpc0_counters"
+        origin = "openconfig"
+        path = "/interfaces/interface[name=xe-0/0/0]/state/counters"
+        subscription_mode = "sample"
+        sample_interval = "10s"
+    [[outputs.file]]
+      files = ["stdout"]
+  fpc1-counters.conf: |
+    [agent]
+      flush_interval = "5s"
+    [[inputs.gnmi]]
+      addresses = ["egress-proxy-gnmi.gop-telegraf.svc.cluster.local:17005"]
+      username = "${GNMI_USER}"
+      password = "${GNMI_PASS}"
+      encoding = "proto"
+      redial = "10s"
+      [[inputs.gnmi.subscription]]
+        name = "fpc1_counters"
+        origin = "openconfig"
+        path = "/interfaces/interface[name=xe-1/0/0]/state/counters"
+        subscription_mode = "sample"
+        sample_interval = "10s"
+    [[outputs.file]]
+      files = ["stdout"]
+  ae-counters.conf: |
+    [agent]
+      flush_interval = "5s"
+    [[inputs.gnmi]]
+      addresses = ["egress-proxy-gnmi.gop-telegraf.svc.cluster.local:17005"]
+      username = "${GNMI_USER}"
+      password = "${GNMI_PASS}"
+      encoding = "proto"
+      redial = "10s"
+      [[inputs.gnmi.subscription]]
+        name = "ae_counters"
+        origin = "openconfig"
+        path = "/interfaces/interface[name=ae10]/state/counters"
+        subscription_mode = "sample"
+        sample_interval = "10s"
+    [[outputs.file]]
+      files = ["stdout"]
+  fpc0-full.conf: |
+    [agent]
+      flush_interval = "5s"
+    [[inputs.gnmi]]
+      addresses = ["egress-proxy-gnmi.gop-telegraf.svc.cluster.local:17005"]
+      username = "${GNMI_USER}"
+      password = "${GNMI_PASS}"
+      encoding = "proto"
+      redial = "10s"
+      [[inputs.gnmi.subscription]]
+        name = "fpc0_full"
+        origin = "openconfig"
+        path = "/interfaces/interface[name=xe-0/0/0]"
+        subscription_mode = "sample"
+        sample_interval = "10s"
+    [[outputs.file]]
+      files = ["stdout"]
+  fpc0-aggid.conf: |
+    [agent]
+      flush_interval = "5s"
+    [[inputs.gnmi]]
+      addresses = ["egress-proxy-gnmi.gop-telegraf.svc.cluster.local:17005"]
+      username = "${GNMI_USER}"
+      password = "${GNMI_PASS}"
+      encoding = "proto"
+      redial = "10s"
+      [[inputs.gnmi.subscription]]
+        name = "fpc0_aggid"
+        origin = "openconfig"
+        path = "/interfaces/interface[name=xe-0/0/0]/ethernet/state/aggregate-id"
+        subscription_mode = "sample"
+        sample_interval = "10s"
+    [[outputs.file]]
+      files = ["stdout"]
+  fpc1-aggid.conf: |
+    [agent]
+      flush_interval = "5s"
+    [[inputs.gnmi]]
+      addresses = ["egress-proxy-gnmi.gop-telegraf.svc.cluster.local:17005"]
+      username = "${GNMI_USER}"
+      password = "${GNMI_PASS}"
+      encoding = "proto"
+      redial = "10s"
+      [[inputs.gnmi.subscription]]
+        name = "fpc1_aggid"
+        origin = "openconfig"
+        path = "/interfaces/interface[name=xe-1/0/0]/ethernet/state/aggregate-id"
+        subscription_mode = "sample"
+        sample_interval = "10s"
+    [[outputs.file]]
+      files = ["stdout"]
+  run.sh: |
+    run() {
+      name=$1; pattern=$2
+      echo "=================== $name"
+      timeout 30 telegraf --config /etc/gnmi-fpc/$name.conf > /tmp/$name.out 2> /tmp/$name.log
+      echo "-- errors/warnings:"
+      grep -E " (E|W)! " /tmp/$name.log | grep -v skip_processors | head -5 | cut -c1-300
+      echo "-- total metric lines:"; wc -l < /tmp/$name.out
+      echo "-- lines matching $pattern:"; grep -c -E "$pattern" /tmp/$name.out
+      echo "-- sample:"; grep -E "$pattern" /tmp/$name.out | head -2 | cut -c1-500
+    }
+    run fpc0-counters "in.octets"
+    run fpc1-counters "in.octets"
+    run ae-counters "in.octets"
+    run fpc0-full "in.octets|aggregate.id|parent"
+    run fpc0-aggid "aggregate.id"
+    run fpc1-aggid "aggregate.id"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gnmi-fpc-check
+  namespace: gop-telegraf
+spec:
+  restartPolicy: Never
+  containers:
+    - name: telegraf
+      image: telegraf:1.39.3
+      envFrom:
+        - secretRef: {name: telegraf-juniper-gnmi-creds}
+      command: ["sh", "/etc/gnmi-fpc/run.sh"]
+      volumeMounts:
+        - {name: cfg, mountPath: /etc/gnmi-fpc}
+  volumes:
+    - name: cfg
+      configMap: {name: gnmi-fpc-check-config}

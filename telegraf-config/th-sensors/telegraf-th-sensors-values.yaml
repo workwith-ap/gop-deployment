@@ -1,10 +1,12 @@
 # ============================================================================
 # telegraf-tyo7-th-sensors — Helm values (NEW release, TH SENSOR ONLY)
-# ============================================================================# Split out from telegraf-tyo7 specifically so that a bad TH sensor-map
+# ============================================================================
+# Split out from telegraf-tyo7 specifically so that a bad TH sensor-map
 # edit can no longer crash SNMP/OPC-UA collection alongside it. This
 # release owns: the init container that runs render-th-sensor-config.sh,
 # 75+ generated socket_listener blocks (one per sensor, on its own
-# port), and the battery/humidity/temperature scale processors.
+# port), the battery/humidity/temperature scale processors, and the
+# sensor inventory input (inventory.conf, file 03).
 #
 # KEY NAMES confirmed against `helm show values influxdata/telegraf` —
 # this chart uses `initContainers` (not `extraInitContainers`) and
@@ -14,12 +16,18 @@
 # correct as-is — that's a raw Kubernetes container spec templated in
 # verbatim, not a chart-specific key.
 #
-# expiration_interval is set to 20m (default is 60s) because Telegraf's
-# prometheus_client output DROPS a metric from /metrics entirely once
-# it's older than this — 60s was too short relative to the sensors'
-# real reporting cadence and caused Prometheus to miss scrapes. Confirm
-# actual sensor interval with the BMS engineer and tighten this once
-# known; 20m is a safe upper bound, not a tuned value.
+# expiration_interval: Telegraf's prometheus_client output DROPS a metric
+# from /metrics entirely once it hasn't been updated for this long. The
+# sensors push one UDP report every 10 minutes (confirmed), so:
+#   - must be LONGER than 10m, or every healthy sensor disappears between
+#     reports (this is what happened with the 60s default);
+#   - 20m = 2 x the report interval, so a sensor survives exactly ONE lost
+#     UDP packet without disappearing. A sensor that misses two reports in
+#     a row is dropped, and Grafana shows it DOWN ~4 minutes later (the
+#     [4m] window in the dashboard queries).
+# Detection time for a dead sensor ≈ 20m after its last report + 4m.
+# Lowering this speeds up detection but risks DOWN flicker on a single
+# lost packet; do not go at or below 10m.
 # ============================================================================
 
 image:
@@ -59,10 +67,10 @@ initContainers:
 volumes:
   - name: th-sensor-static-config-vol
     configMap:
-      name: telegraf-th-sensor-static-config      # processors.conf (file 03)
+      name: telegraf-th-sensor-static-config      # processors.conf + inventory.conf (file 03)
   - name: th-sensor-map-vol
     configMap:
-      name: telegraf-th-sensor-map         # sensors.csv (file 04)
+      name: telegraf-th-sensor-map         # sensors.csv (file 04) — mounted in BOTH the init container and the main container
   - name: th-sensor-render-script-vol
     configMap:
       name: telegraf-th-sensor-render-script      # render-th-sensor-config.sh (file 05)
@@ -73,6 +81,11 @@ volumes:
 mountPoints:
   - name: telegraf-d-vol
     mountPath: /etc/telegraf/telegraf.d
+  # sensors.csv for inventory.conf's [[inputs.file]]. Own directory, NOT
+  # inside telegraf.d — mounting a ConfigMap there would hide the
+  # generated .conf files.
+  - name: th-sensor-map-vol
+    mountPath: /etc/telegraf/th-sensor-map
 
 service:
   enabled: true

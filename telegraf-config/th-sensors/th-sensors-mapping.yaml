@@ -43,6 +43,11 @@
 #                            across both source rows per IP)
 # ============================================================================
 
+#TYO6 Sensors initially deployed
+#TYO4 Sensors - onboarded Sept.18, 2026
+
+# ============================================================================
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -123,6 +128,66 @@ data:
     10.2.226.240,3253,TYO6/ROW/424/cold_aisle_temp1,TYO6/ROW/424/cold_aisle_hum1,TYO6-4-DH-TH-15,TYO6-4-3
     10.2.226.241,3254,TYO6/ROW/425/cold_aisle_temp1,TYO6/ROW/425/cold_aisle_hum1,TYO6-4-DH-TH-16,TYO6-4-4
     10.2.226.242,3255,TYO6/ROW/426/cold_aisle_temp1,TYO6/ROW/426/cold_aisle_hum1,TYO6-4-DH-TH-17,TYO6-4-4
-    10.2.226.243,3256,TYO6/ROW/428/cold_aisle_temp1,TYO6/ROW/428/cold_aisle_hum1,TYO6-4-DH-TH-18,TYO6-4-4
-    10.2.226.244,3257,TYO6/ROW/430/cold_aisle_temp1,TYO6/ROW/430/cold_aisle_hum1,TYO6-4-DH-TH-19,TYO6-4-4
+    10.2.226.243,3256,TYO6/ROW/428/cold_aisle_temp1,TYO6/ROW/432/cold_aisle_hum1,TYO6-4-DH-TH-18,TYO6-4-4
+    10.2.226.244,3257,TYO6/ROW/430/cold_aisle_temp1,TYO6/ROW/432/cold_aisle_hum1,TYO6-4-DH-TH-19,TYO6-4-4
     10.2.226.245,3258,TYO6/ROW/432/cold_aisle_temp1,TYO6/ROW/432/cold_aisle_hum1,TYO6-4-DH-TH-20,TYO6-4-4
+    10.2.226.81,3259,TYO4/ROW/101/cold_aisle_temp1,TYO4/ROW/101/cold_aisle_hum1,TYO4-1-DH-TH-1,TYO4-1-1
+    10.2.226.82,3260,TYO4/ROW/102/cold_aisle_temp1,TYO4/ROW/102/cold_aisle_hum1,TYO4-1-DH-TH-2,TYO4-1-1
+    10.2.226.83,3261,TYO4/ROW/103/cold_aisle_temp1,TYO4/ROW/103/cold_aisle_hum1,TYO4-1-DH-TH-3,TYO4-1-1
+    10.2.226.84,3262,TYO4/ROW/105/cold_aisle_temp1,TYO4/ROW/105/cold_aisle_hum1,TYO4-1-DH-TH-4,TYO4-1-2
+    10.2.226.85,3263,TYO4/ROW/110/cold_aisle_temp1,TYO4/ROW/110/cold_aisle_hum1,TYO4-1-DH-TH-5,TYO4-1-3
+    10.2.226.86,3264,TYO4/ROW/110/cold_aisle_temp1,TYO4/ROW/110/cold_aisle_hum1,TYO4-1-DH-TH-6,TYO4-1-3
+    10.2.226.87,3265,TYO4/ROW/112/cold_aisle_temp1,TYO4/ROW/112/cold_aisle_hum1,TYO4-1-DH-TH-7,TYO4-1-4
+    10.2.226.88,3266,TYO4/ROW/114/cold_aisle_temp1,TYO4/ROW/114/cold_aisle_hum1,TYO4-1-DH-TH-8,TYO4-1-4
+    10.2.226.89,3267,TYO4/ROW/115/cold_aisle_temp1,TYO4/ROW/115/cold_aisle_hum1,TYO4-1-DH-TH-9,TYO4-1-4
+    10.2.226.90,3268,TYO4/ROW/117/cold_aisle_temp1,TYO4/ROW/117/cold_aisle_hum1,TYO4-1-DH-TH-10,TYO4-1-4
+    10.2.226.91,3269,TYO4/ROW/118/cold_aisle_temp1,TYO4/ROW/118/cold_aisle_hum1,TYO4-1-DH-TH-11,TYO4-1-5
+    10.2.226.92,3270,TYO4/ROW/119/cold_aisle_temp1,TYO4/ROW/119/cold_aisle_hum1,TYO4-1-DH-TH-12,TYO4-1-5
+    10.2.226.93,3271,TYO4/ROW/121/cold_aisle_temp1,TYO4/ROW/121/cold_aisle_hum1,TYO4-1-DH-TH-13,TYO4-1-5
+    10.2.226.94,3272,TYO4/ROW/123/cold_aisle_temp1,TYO4/ROW/123/cold_aisle_hum1,TYO4-1-DH-TH-14,TYO4-1-5
+    10.2.226.95,3273,TYO4/ROW/124/cold_aisle_temp1,TYO4/ROW/124/cold_aisle_hum1,TYO4-1-DH-TH-15,TYO4-1-6
+    10.2.226.96,3274,TYO4/ROW/124/cold_aisle_temp1,TYO4/ROW/124/cold_aisle_hum1,TYO4-1-DH-TH-16,TYO4-1-6
+    10.2.226.97,3275,TYO4/ROW/127/cold_aisle_temp1,TYO4/ROW/127/cold_aisle_hum1,TYO4-1-DH-TH-17,TYO4-1-7
+    10.2.226.98,3276,TYO4/ROW/127/cold_aisle_temp1,TYO4/ROW/127/cold_aisle_hum1,TYO4-1-DH-TH-18,TYO4-1-7
+    10.2.226.99,3277,TYO4/ROW/202/cold_aisle_temp1,TYO4/ROW/202/cold_aisle_hum1,TYO4-2-DH-TH-19,TYO4-2-1
+    10.2.226.100,3278,TYO4/ROW/207/cold_aisle_temp1,TYO4/ROW/207/cold_aisle_hum1,TYO4-2-DH-TH-20,TYO4-2-1
+    10.2.226.101,3279,TYO4/ROW/211/cold_aisle_temp1,TYO4/ROW/211/cold_aisle_hum1,TYO4-2-DH-TH-21,TYO4-2-1
+    10.2.226.102,3280,TYO4/ROW/202/cold_aisle_temp1,TYO4/ROW/202/cold_aisle_hum1,TYO4-2-DH-TH-22,TYO4-2-1
+    10.2.226.103,3281,TYO4/ROW/207/cold_aisle_temp1,TYO4/ROW/207/cold_aisle_hum1,TYO4-2-DH-TH-23,TYO4-2-1
+    10.2.226.104,3282,TYO4/ROW/211/cold_aisle_temp1,TYO4/ROW/211/cold_aisle_hum1,TYO4-2-DH-TH-24,TYO4-2-1
+    10.2.226.105,3283,TYO4/ROW/216/cold_aisle_temp1,TYO4/ROW/216/cold_aisle_hum1,TYO4-2-DH-TH-25,TYO4-2-1
+    10.2.226.106,3284,TYO4/ROW/217/cold_aisle_temp1,TYO4/ROW/217/cold_aisle_hum1,TYO4-2-DH-TH-26,TYO4-2-1
+    10.2.226.107,3285,TYO4/ROW/220/cold_aisle_temp1,TYO4/ROW/220/cold_aisle_hum1,TYO4-2-DH-TH-27,TYO4-2-1
+    10.2.226.108,3286,TYO4/ROW/223/cold_aisle_temp1,TYO4/ROW/223/cold_aisle_hum1,TYO4-2-DH-TH-28,TYO4-2-1
+    10.2.226.109,3287,TYO4/ROW/225/cold_aisle_temp1,TYO4/ROW/225/cold_aisle_hum1,TYO4-2-DH-TH-29,TYO4-2-1
+    10.2.226.110,3288,TYO4/ROW/227/cold_aisle_temp1,TYO4/ROW/227/cold_aisle_hum1,TYO4-2-DH-TH-30,TYO4-2-1
+    10.2.226.111,3289,TYO4/ROW/301/cold_aisle_temp1,TYO4/ROW/301/cold_aisle_hum1,TYO4-3-DH-TH-31,TYO4-3-1
+    10.2.226.112,3290,TYO4/ROW/304/cold_aisle_temp1,TYO4/ROW/304/cold_aisle_hum1,TYO4-3-DH-TH-32,TYO4-3-1
+    10.2.226.113,3291,TYO4/ROW/306/cold_aisle_temp1,TYO4/ROW/306/cold_aisle_hum1,TYO4-3-DH-TH-33,TYO4-3-1
+    10.2.226.114,3292,TYO4/ROW/301/cold_aisle_temp1,TYO4/ROW/301/cold_aisle_hum1,TYO4-3-DH-TH-34,TYO4-3-1
+    10.2.226.115,3293,TYO4/ROW/304/cold_aisle_temp1,TYO4/ROW/304/cold_aisle_hum1,TYO4-3-DH-TH-35,TYO4-3-1
+    10.2.226.116,3294,TYO4/ROW/306/cold_aisle_temp1,TYO4/ROW/306/cold_aisle_hum1,TYO4-3-DH-TH-36,TYO4-3-1
+    10.2.226.117,3295,TYO4/ROW/308/cold_aisle_temp1,TYO4/ROW/308/cold_aisle_hum1,TYO4-3-DH-TH-37,TYO4-3-1
+    10.2.226.118,3296,TYO4/ROW/311/cold_aisle_temp1,TYO4/ROW/311/cold_aisle_hum1,TYO4-3-DH-TH-38,TYO4-3-1
+    10.2.226.119,3297,TYO4/ROW/313/cold_aisle_temp1,TYO4/ROW/313/cold_aisle_hum1,TYO4-3-DH-TH-39,TYO4-3-1
+    10.2.226.120,3298,TYO4/ROW/315/cold_aisle_temp1,TYO4/ROW/315/cold_aisle_hum1,TYO4-3-DH-TH-40,TYO4-3-1
+    10.2.226.121,3299,TYO4/ROW/316/cold_aisle_temp1,TYO4/ROW/316/cold_aisle_hum1,TYO4-3-DH-TH-41,TYO4-3-1
+    10.2.226.122,3300,TYO4/ROW/318/cold_aisle_temp1,TYO4/ROW/318/cold_aisle_hum1,TYO4-3-DH-TH-42,TYO4-3-1
+    10.2.226.123,3301,TYO4/ROW/321/cold_aisle_temp1,TYO4/ROW/321/cold_aisle_hum1,TYO4-3-DH-TH-43,TYO4-3-2
+    10.2.226.124,3302,TYO4/ROW/324/cold_aisle_temp1,TYO4/ROW/324/cold_aisle_hum1,TYO4-3-DH-TH-44,TYO4-3-2
+    10.2.226.125,3303,TYO4/ROW/327/cold_aisle_temp1,TYO4/ROW/327/cold_aisle_hum1,TYO4-3-DH-TH-45,TYO4-3-2
+    10.2.226.126,3304,TYO4/ROW/330/cold_aisle_temp1,TYO4/ROW/330/cold_aisle_hum1,TYO4-3-DH-TH-46,TYO4-3-2
+    10.2.226.127,3305,TYO4/ROW/332/cold_aisle_temp1,TYO4/ROW/332/cold_aisle_hum1,TYO4-3-DH-TH-47,TYO4-3-2
+    10.2.226.128,3306,TYO4/ROW/336/cold_aisle_temp1,TYO4/ROW/336/cold_aisle_hum1,TYO4-3-DH-TH-48,TYO4-3-2
+    10.2.226.129,3307,TYO4/ROW/338/cold_aisle_temp1,TYO4/ROW/338/cold_aisle_hum1,TYO4-4-DH-TH-49,TYO4-4-1
+    10.2.226.130,3308,TYO4/ROW/343/cold_aisle_temp1,TYO4/ROW/343/cold_aisle_hum1,TYO4-4-DH-TH-50,TYO4-4-1
+    10.2.226.131,3309,TYO4/ROW/407/cold_aisle_temp1,TYO4/ROW/407/cold_aisle_hum1,TYO4-4-DH-TH-51,TYO4-4-1
+    10.2.226.132,3310,TYO4/ROW/407/cold_aisle_temp1,TYO4/ROW/407/cold_aisle_hum1,TYO4-4-DH-TH-52,TYO4-4-1
+    10.2.226.133,3311,TYO4/ROW/418/cold_aisle_temp1,TYO4/ROW/418/cold_aisle_hum1,TYO4-4-DH-TH-53,TYO4-4-1
+    10.2.226.134,3312,TYO4/ROW/420/cold_aisle_temp1,TYO4/ROW/420/cold_aisle_hum1,TYO4-4-DH-TH-54,TYO4-4-1
+    10.2.226.135,3313,TYO4/ROW/422/cold_aisle_temp1,TYO4/ROW/422/cold_aisle_hum1,TYO4-4-DH-TH-55,TYO4-4-1
+    10.2.226.136,3314,TYO4/ROW/423/cold_aisle_temp1,TYO4/ROW/423/cold_aisle_hum1,TYO4-4-DH-TH-56,TYO4-4-2
+    10.2.226.137,3315,TYO4/ROW/425/cold_aisle_temp1,TYO4/ROW/425/cold_aisle_hum1,TYO4-4-DH-TH-57,TYO4-4-2
+    10.2.226.138,3316,TYO4/ROW/427/cold_aisle_temp1,TYO4/ROW/427/cold_aisle_hum1,TYO4-4-DH-TH-58,TYO4-4-2
+    10.2.226.139,3317,TYO4/ROW/429/cold_aisle_temp1,TYO4/ROW/429/cold_aisle_hum1,TYO4-4-DH-TH-59,TYO4-4-2
+    10.2.226.140,3318,TYO4/ROW/431/cold_aisle_temp1,TYO4/ROW/431/cold_aisle_hum1,TYO4-4-DH-TH-60,TYO4-4-3

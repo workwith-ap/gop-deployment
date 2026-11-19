@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gnmi-noc-discovery-config
+  namespace: gop-telegraf
+data:
+  status.conf: |
+    [agent]
+      flush_interval = "5s"
+    [[inputs.gnmi]]
+      addresses = ["egress-proxy-gnmi.gop-telegraf.svc.cluster.local:17005"]
+      username = "${GNMI_USER}"
+      password = "${GNMI_PASS}"
+      encoding = "proto"
+      redial = "10s"
+      [[inputs.gnmi.subscription]]
+        name = "oper_status"
+        origin = "openconfig"
+        path = "/interfaces/interface/state/oper-status"
+        subscription_mode = "sample"
+        sample_interval = "10s"
+    [[outputs.file]]
+      files = ["stdout"]
+  lldp.conf: |
+    [agent]
+      flush_interval = "5s"
+    [[inputs.gnmi]]
+      addresses = ["egress-proxy-gnmi.gop-telegraf.svc.cluster.local:17005"]
+      username = "${GNMI_USER}"
+      password = "${GNMI_PASS}"
+      encoding = "proto"
+      redial = "10s"
+      [[inputs.gnmi.subscription]]
+        name = "lldp"
+        origin = "openconfig"
+        path = "/lldp/interfaces/interface"
+        subscription_mode = "sample"
+        sample_interval = "10s"
+    [[outputs.file]]
+      files = ["stdout"]
+  fdb.conf: |
+    [agent]
+      flush_interval = "5s"
+    [[inputs.gnmi]]
+      addresses = ["egress-proxy-gnmi.gop-telegraf.svc.cluster.local:17005"]
+      username = "${GNMI_USER}"
+      password = "${GNMI_PASS}"
+      encoding = "proto"
+      redial = "10s"
+      [[inputs.gnmi.subscription]]
+        name = "fdb"
+        origin = "openconfig"
+        path = "/network-instances/network-instance/fdb"
+        subscription_mode = "sample"
+        sample_interval = "10s"
+    [[outputs.file]]
+      files = ["stdout"]
+  arp.conf: |
+    [agent]
+      flush_interval = "5s"
+    [[inputs.gnmi]]
+      addresses = ["egress-proxy-gnmi.gop-telegraf.svc.cluster.local:17005"]
+      username = "${GNMI_USER}"
+      password = "${GNMI_PASS}"
+      encoding = "proto"
+      redial = "10s"
+      [[inputs.gnmi.subscription]]
+        name = "arp"
+        origin = "openconfig"
+        path = "/interfaces/interface"
+        subscription_mode = "sample"
+        sample_interval = "10s"
+    [[outputs.file]]
+      files = ["stdout"]
+  run.sh: |
+    run() {
+      name=$1; pattern=$2; lines=$3
+      echo "=================== $name"
+      timeout 40 telegraf --config /etc/gnmi-noc/$name.conf > /tmp/$name.out 2> /tmp/$name.log
+      echo "-- errors/warnings:"
+      grep -E " (E|W)! " /tmp/$name.log | grep -v skip_processors | head -5 | cut -c1-400
+      grep -E "$pattern" /tmp/$name.out > /tmp/$name.f
+      echo "-- matching metric lines:"; wc -l < /tmp/$name.f
+      echo "-- sample:"; head -$lines /tmp/$name.f | cut -c1-600
+    }
+    run status "." 5
+    echo "-- status values seen:"
+    grep -o -E '"(UP|DOWN|TESTING|UNKNOWN|DORMANT|NOT_PRESENT|LOWER_LAYER_DOWN)"' /tmp/status.out | sort | uniq -c
+    run lldp "." 5
+    run fdb "." 5
+    run arp "neighbor" 10
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gnmi-noc-discovery
+  namespace: gop-telegraf
+spec:
+  restartPolicy: Never
+  containers:
+    - name: telegraf
+      image: telegraf:1.39.3
+      envFrom:
+        - secretRef: {name: telegraf-juniper-gnmi-creds}
+      command: ["sh", "/etc/gnmi-noc/run.sh"]
+      volumeMounts:
+        - {name: cfg, mountPath: /etc/gnmi-noc}
+  volumes:
+    - name: cfg
+      configMap: {name: gnmi-noc-discovery-config}

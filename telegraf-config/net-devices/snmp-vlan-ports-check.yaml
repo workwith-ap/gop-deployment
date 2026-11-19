@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: snmp-vlan-ports-config
+  namespace: gop-telegraf
+data:
+  vlan.conf: |
+    [agent]
+      snmp_translator = "gosmi"
+
+    # A: VLAN list with a numeric value (row status) and the member-port bitmaps.
+    [[inputs.snmp]]
+      agents = ["udp://egress-proxy-snmp.gop-telegraf.svc.cluster.local:16005"]
+      version = 2
+      community = "DE-SNMP-RO"
+      timeout = "10s"
+      retries = 2
+      name = "t_static"
+      [[inputs.snmp.table]]
+        name = "vlan_static"
+        index_as_tag = true
+        [[inputs.snmp.table.field]]
+          name = "vlan_name"
+          oid = ".1.3.6.1.2.1.17.7.1.4.3.1.1"
+          is_tag = true
+        [[inputs.snmp.table.field]]
+          name = "row_status"
+          oid = ".1.3.6.1.2.1.17.7.1.4.3.1.5"
+        [[inputs.snmp.table.field]]
+          name = "egress_ports_hex"
+          oid = ".1.3.6.1.2.1.17.7.1.4.3.1.2"
+          conversion = "hex"
+        [[inputs.snmp.table.field]]
+          name = "untagged_ports_hex"
+          oid = ".1.3.6.1.2.1.17.7.1.4.3.1.4"
+          conversion = "hex"
+
+    # B: each port's own (native or access) VLAN. Index = bridge port number.
+    [[inputs.snmp]]
+      agents = ["udp://egress-proxy-snmp.gop-telegraf.svc.cluster.local:16005"]
+      version = 2
+      community = "DE-SNMP-RO"
+      timeout = "10s"
+      retries = 2
+      name = "t_pvid"
+      [[inputs.snmp.table]]
+        name = "vlan_pvid"
+        index_as_tag = true
+        [[inputs.snmp.table.field]]
+          name = "pvid"
+          oid = ".1.3.6.1.2.1.17.7.1.4.5.1.1"
+
+    # C: bridge port number -> ifIndex, so a bridge port can be matched to a port name.
+    [[inputs.snmp]]
+      agents = ["udp://egress-proxy-snmp.gop-telegraf.svc.cluster.local:16005"]
+      version = 2
+      community = "DE-SNMP-RO"
+      timeout = "10s"
+      retries = 2
+      name = "t_baseport"
+      [[inputs.snmp.table]]
+        name = "bridge_port"
+        index_as_tag = true
+        [[inputs.snmp.table.field]]
+          name = "if_index"
+          oid = ".1.3.6.1.2.1.17.1.4.1.2"
+    [[outputs.file]]
+      files = ["stdout"]
+  run.sh: |
+    timeout 120 telegraf --config /etc/snmp-vlan/vlan.conf --once > /tmp/v.out 2> /tmp/v.log
+    echo "=================== errors/warnings"
+    grep -E " (E|W)! " /tmp/v.log | grep -vE "Strict environment|skip_processors_after|agent_host_tag" | head -8 | cut -c1-300
+    for t in vlan_static vlan_pvid bridge_port; do
+      echo "=================== $t lines"
+      grep -c "^$t," /tmp/v.out
+      grep "^$t," /tmp/v.out | head -30 | sed -E 's/agent_host=[^,]*,host=[^,]*,//' | cut -c1-420
+    done
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: snmp-vlan-ports-check
+  namespace: gop-telegraf
+spec:
+  restartPolicy: Never
+  containers:
+    - name: telegraf
+      image: telegraf:1.39.3
+      command: ["sh", "/etc/snmp-vlan/run.sh"]
+      volumeMounts:
+        - {name: cfg, mountPath: /etc/snmp-vlan}
+  volumes:
+    - name: cfg
+      configMap: {name: snmp-vlan-ports-config}

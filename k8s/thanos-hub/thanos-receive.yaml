@@ -76,7 +76,7 @@ spec:
       spec:
         accessModes: ["ReadWriteOnce"]
         storageClassName: longhorn
-        resources: {requests: {storage: 20Gi}}
+        resources: {requests: {storage: 50Gi}}
 ---
 # Headless — used for StatefulSet pod DNS + inter-receive gRPC (hashring/replication)
 apiVersion: v1

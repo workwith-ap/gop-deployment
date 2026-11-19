@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: snmp-vlan-check-config
+  namespace: gop-telegraf
+data:
+  vlan.conf: |
+    [agent]
+      snmp_translator = "gosmi"
+    # Each test is its own input, so one failing source does not hide the others.
+
+    # A: standard VLAN names (Q-BRIDGE-MIB, dot1qVlanStaticName). Index = VLAN ID.
+    [[inputs.snmp]]
+      agents = ["udp://egress-proxy-snmp.gop-telegraf.svc.cluster.local:16005"]
+      version = 2
+      community = "DE-SNMP-RO"
+      timeout = "10s"
+      retries = 2
+      name = "t_qbridge"
+      [[inputs.snmp.table]]
+        name = "vlan_qbridge"
+        index_as_tag = true
+        [[inputs.snmp.table.field]]
+          name = "vlan_name"
+          oid = ".1.3.6.1.2.1.17.7.1.4.3.1.1"
+
+    # B: Juniper VLAN names (JUNIPER-VLAN-MIB, jnxExVlanName). Index = Juniper VLAN index.
+    [[inputs.snmp]]
+      agents = ["udp://egress-proxy-snmp.gop-telegraf.svc.cluster.local:16005"]
+      version = 2
+      community = "DE-SNMP-RO"
+      timeout = "10s"
+      retries = 2
+      name = "t_juniper"
+      [[inputs.snmp.table]]
+        name = "vlan_juniper"
+        index_as_tag = true
+        [[inputs.snmp.table.field]]
+          name = "vlan_name"
+          oid = ".1.3.6.1.4.1.2636.3.40.1.5.1.5.1.2"
+        [[inputs.snmp.table.field]]
+          name = "vlan_tag"
+          oid = ".1.3.6.1.4.1.2636.3.40.1.5.1.5.1.5"
+
+    # C: Juniper per-port VLAN membership (jnxExVlanPortGroupTable). One row per port and VLAN.
+    [[inputs.snmp]]
+      agents = ["udp://egress-proxy-snmp.gop-telegraf.svc.cluster.local:16005"]
+      version = 2
+      community = "DE-SNMP-RO"
+      timeout = "10s"
+      retries = 2
+      name = "t_juniper_port"
+      [[inputs.snmp.table]]
+        name = "vlan_port_juniper"
+        index_as_tag = true
+        [[inputs.snmp.table.field]]
+          name = "port_status"
+          oid = ".1.3.6.1.4.1.2636.3.40.1.5.1.7.1.3"
+    [[outputs.file]]
+      files = ["stdout"]
+  run.sh: |
+    timeout 120 telegraf --config /etc/snmp-vlan/vlan.conf --once > /tmp/v.out 2> /tmp/v.log
+    echo "=================== errors/warnings"
+    grep -E " (E|W)! " /tmp/v.log | grep -vE "Strict environment|skip_processors_after|agent_host_tag" | head -8 | cut -c1-300
+    for t in vlan_qbridge vlan_juniper vlan_port_juniper; do
+      echo "=================== $t lines"
+      grep -c "^$t," /tmp/v.out
+      grep "^$t," /tmp/v.out | head -40 | sed -E 's/agent_host=[^,]*,host=[^,]*,//' | cut -c1-200
+    done
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: snmp-vlan-check
+  namespace: gop-telegraf
+spec:
+  restartPolicy: Never
+  containers:
+    - name: telegraf
+      image: telegraf:1.39.3
+      command: ["sh", "/etc/snmp-vlan/run.sh"]
+      volumeMounts:
+        - {name: cfg, mountPath: /etc/snmp-vlan}
+  volumes:
+    - name: cfg
+      configMap: {name: snmp-vlan-check-config}

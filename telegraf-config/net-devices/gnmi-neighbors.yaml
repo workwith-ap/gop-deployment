@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gnmi-neighbors-config
+  namespace: gop-telegraf
+data:
+  lldp.conf: |
+    [agent]
+      flush_interval = "5s"
+    [[inputs.gnmi]]
+      addresses = ["egress-proxy-gnmi.gop-telegraf.svc.cluster.local:17005"]
+      username = "${GNMI_USER}"
+      password = "${GNMI_PASS}"
+      encoding = "proto"
+      redial = "10s"
+      [[inputs.gnmi.subscription]]
+        name = "lldp"
+        origin = "openconfig"
+        path = "/lldp/interfaces/interface"
+        subscription_mode = "sample"
+        sample_interval = "10s"
+    [[outputs.file]]
+      files = ["stdout"]
+  arp.conf: |
+    [agent]
+      flush_interval = "5s"
+    [[inputs.gnmi]]
+      addresses = ["egress-proxy-gnmi.gop-telegraf.svc.cluster.local:17005"]
+      username = "${GNMI_USER}"
+      password = "${GNMI_PASS}"
+      encoding = "proto"
+      redial = "10s"
+      [[inputs.gnmi.subscription]]
+        name = "arp"
+        origin = "openconfig"
+        path = "/interfaces/interface"
+        subscription_mode = "sample"
+        sample_interval = "10s"
+    [[outputs.file]]
+      files = ["stdout"]
+  run.sh: |
+    timeout 40 telegraf --config /etc/gnmi-neighbors/lldp.conf > /tmp/lldp.out 2> /tmp/lldp.log
+    echo "=== LLDP neighbours (local port -> neighbour [id]):"
+    grep 'path=/lldp/interfaces/interface/neighbors/neighbor,' /tmp/lldp.out | sed -E 's/.*,id=([^,]*),name=([^,]*),.*system_name="([^"]*)".*/\2 -> \3 [\1]/' | sort -u
+    echo "=== LLDP neighbour field names:"
+    grep 'path=/lldp/interfaces/interface/neighbors/neighbor,' /tmp/lldp.out | head -1 | tr ',' '\n' | grep 'neighbors/neighbor/state' | sed 's/=.*//'
+    timeout 40 telegraf --config /etc/gnmi-neighbors/arp.conf > /tmp/arp.out 2> /tmp/arp.log
+    echo "=== ARP table (interface ip mac):"
+    grep 'ipv4/neighbors/neighbor,' /tmp/arp.out | sed -E 's/.*,ip=([^,]*),name=([^,]*),path=.*link_layer_address="([^"]*)".*/\2 \1 \3/' | sort -u
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gnmi-neighbors
+  namespace: gop-telegraf
+spec:
+  restartPolicy: Never
+  containers:
+    - name: telegraf
+      image: telegraf:1.39.3
+      envFrom:
+        - secretRef: {name: telegraf-juniper-gnmi-creds}
+      command: ["sh", "/etc/gnmi-neighbors/run.sh"]
+      volumeMounts:
+        - {name: cfg, mountPath: /etc/gnmi-neighbors}
+  volumes:
+    - name: cfg
+      configMap: {name: gnmi-neighbors-config}

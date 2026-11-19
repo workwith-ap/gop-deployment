@@ -1,0 +1,225 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telegraf-juniper-snmp-inputs
+  namespace: gop-telegraf
+data:
+  snmp-inputs.conf: |
+    [[inputs.snmp]]
+      agents = ["udp://egress-proxy-snmp.gop-telegraf.svc.cluster.local:16005"]
+      version = 2
+      community = "DE-SNMP-RO"
+      name = "netdev_juniper_tyo7"
+      timeout = "10s"
+      retries = 3
+
+      [[inputs.snmp.field]]
+        name = "sysName"
+        oid = ".1.3.6.1.2.1.1.5.0"
+        is_tag = true
+
+      [[inputs.snmp.field]]
+        name = "sysDescr"
+        oid = ".1.3.6.1.2.1.1.1.0"
+
+      [[inputs.snmp.field]]
+        name = "sysUpTime"
+        oid = ".1.3.6.1.2.1.1.3.0"
+
+      [[inputs.snmp.table]]
+        name = "interface"
+        inherit_tags = ["sysName"]
+        oid = ".1.3.6.1.2.1.2.2.1"
+
+        [[inputs.snmp.table.field]]
+          name = "ifDescr"
+          oid = ".1.3.6.1.2.1.2.2.1.2"
+          is_tag = true
+
+        [[inputs.snmp.table.field]]
+          name = "ifOperStatus"
+          oid = ".1.3.6.1.2.1.2.2.1.8"
+
+        [[inputs.snmp.table.field]]
+          name = "ifAdminStatus"
+          oid = ".1.3.6.1.2.1.2.2.1.7"
+
+        [[inputs.snmp.table.field]]
+          name = "ifInOctets"
+          oid = ".1.3.6.1.2.1.2.2.1.10"
+
+        [[inputs.snmp.table.field]]
+          name = "ifOutOctets"
+          oid = ".1.3.6.1.2.1.2.2.1.16"
+
+        [[inputs.snmp.table.field]]
+          name = "ifInErrors"
+          oid = ".1.3.6.1.2.1.2.2.1.14"
+
+        [[inputs.snmp.table.field]]
+          name = "ifOutErrors"
+          oid = ".1.3.6.1.2.1.2.2.1.20"
+
+      # ifXTable (RFC 2863) - 32-bit ifSpeed/ifInOctets/ifOutOctets in
+      # the base table above overflow/saturate on high-speed links
+      # (confirmed: ifSpeed showed 4294967295 = 2^32-1 on this switch's
+      # own ae/xe/et ports during testing). These are the 64-bit-safe
+      # equivalents, confirmed against a real port (xe-0/0/0, index
+      # 516) via a full snmpbulkwalk before adding.
+      [[inputs.snmp.table]]
+        name = "interface_x"
+        inherit_tags = ["sysName"]
+        oid = ".1.3.6.1.2.1.31.1.1.1"
+
+        [[inputs.snmp.table.field]]
+          name = "ifName"
+          oid = ".1.3.6.1.2.1.31.1.1.1.1"
+          is_tag = true
+
+        [[inputs.snmp.table.field]]
+          name = "ifAlias"
+          oid = ".1.3.6.1.2.1.31.1.1.1.18"
+
+        [[inputs.snmp.table.field]]
+          name = "ifHighSpeed"
+          oid = ".1.3.6.1.2.1.31.1.1.1.15"
+
+        [[inputs.snmp.table.field]]
+          name = "ifHCInOctets"
+          oid = ".1.3.6.1.2.1.31.1.1.1.6"
+
+        [[inputs.snmp.table.field]]
+          name = "ifHCOutOctets"
+          oid = ".1.3.6.1.2.1.31.1.1.1.10"
+
+      # AE membership (IEEE 802.3ad LAG MIB, dot3adAggPortAttachedAggID).
+      # One row per bundled port. The row index ("index" label) is the ifIndex
+      # of the port's .0 logical unit, and the value is the ifIndex of the AE.
+      # The AE ifIndex is also kept as a label so dashboards can show both names.
+      [[inputs.snmp.table]]
+        name = "lag_port"
+        inherit_tags = ["sysName"]
+        index_as_tag = true
+
+        [[inputs.snmp.table.field]]
+          name = "attached_agg_id"
+          oid = ".1.2.840.10006.300.43.1.2.1.1.13"
+
+        [[inputs.snmp.table.field]]
+          name = "attached_ae_ifindex"
+          oid = ".1.2.840.10006.300.43.1.2.1.1.13"
+          is_tag = true
+
+      # VLANs (standard Q-BRIDGE-MIB, dot1qVlanStatic table). Index = VLAN ID.
+      # The name arrives as "name+ID", which the dashboard trims.
+      # On this switch egress_ports and untagged_ports are text lists of bridge
+      # port numbers (for example "3,4,9,10,11"); the starlark processor below
+      # turns each list into one vlan_port metric per port.
+      [[inputs.snmp.table]]
+        name = "vlan_static"
+        inherit_tags = ["sysName"]
+        index_as_tag = true
+
+        [[inputs.snmp.table.field]]
+          name = "vlan_name"
+          oid = ".1.3.6.1.2.1.17.7.1.4.3.1.1"
+          is_tag = true
+
+        [[inputs.snmp.table.field]]
+          name = "row_status"
+          oid = ".1.3.6.1.2.1.17.7.1.4.3.1.5"
+
+        [[inputs.snmp.table.field]]
+          name = "egress_ports"
+          oid = ".1.3.6.1.2.1.17.7.1.4.3.1.2"
+
+        [[inputs.snmp.table.field]]
+          name = "untagged_ports"
+          oid = ".1.3.6.1.2.1.17.7.1.4.3.1.4"
+
+      # Bridge port number -> ifIndex of the interface (here: the AE ports).
+      [[inputs.snmp.table]]
+        name = "bridge_port"
+        inherit_tags = ["sysName"]
+        index_as_tag = true
+
+        [[inputs.snmp.table.field]]
+          name = "if_index"
+          oid = ".1.3.6.1.2.1.17.1.4.1.2"
+
+        [[inputs.snmp.table.field]]
+          name = "port_ifindex"
+          oid = ".1.3.6.1.2.1.17.1.4.1.2"
+          is_tag = true
+
+      # Optics readings (JUNIPER-DOM-MIB, jnxDomCurrentTable). The row index is the
+      # ifIndex of the physical port. Columns 5 and 7 are in hundredths of a dBm, so
+      # float(2) converts them to dBm; column 8 is the module temperature in Celsius.
+      # Ports with no optics reading (for example direct-attach cables) report 0.
+      [[inputs.snmp.table]]
+        name = "optics"
+        inherit_tags = ["sysName"]
+        index_as_tag = true
+
+        [[inputs.snmp.table.field]]
+          name = "tx_power_dbm"
+          oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.7"
+          conversion = "float(2)"
+
+        [[inputs.snmp.table.field]]
+          name = "rx_power_dbm"
+          oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.5"
+          conversion = "float(2)"
+
+        [[inputs.snmp.table.field]]
+          name = "module_temperature_c"
+          oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.8"
+
+    # ifOperStatus/ifAdminStatus arrive as raw IF-MIB integers, not
+    # words — this maps them to readable strings, same pattern as
+    # th-sensors' enum processor. Scoped with namepass so it only
+    # touches this device's "interface" measurement.
+    [[processors.enum]]
+      namepass = ["interface"]
+      [[processors.enum.mapping]]
+        fields = ["ifOperStatus", "ifAdminStatus"]
+        [processors.enum.mapping.value_mappings]
+          1 = "up"
+          2 = "down"
+          3 = "testing"
+          4 = "unknown"
+          5 = "dormant"
+          6 = "notPresent"
+          7 = "lowerLayerDown"
+
+    # Turns the VLAN port lists into one metric per (VLAN, bridge port):
+    # vlan_port_member{sysName, vlan, vlan_name, bridge_port, tagged}.
+    [[processors.starlark]]
+      namepass = ["vlan_static"]
+      source = '''
+    def apply(metric):
+        out = []
+        ports = metric.fields.get("egress_ports", "")
+        untagged = metric.fields.get("untagged_ports", "")
+        unt = []
+        if untagged:
+            unt = [x.strip() for x in untagged.split(",")]
+        for p in ports.split(","):
+            p = p.strip()
+            if p == "":
+                continue
+            m = Metric("vlan_port")
+            m.tags["sysName"] = metric.tags.get("sysName", "")
+            m.tags["vlan"] = metric.tags.get("index", "")
+            m.tags["vlan_name"] = metric.tags.get("vlan_name", "")
+            m.tags["bridge_port"] = p
+            if p in unt:
+                m.tags["tagged"] = "untagged"
+            else:
+                m.tags["tagged"] = "tagged"
+            m.fields["member"] = 1
+            m.time = metric.time
+            out.append(m)
+        out.append(metric)
+        return out
+    '''

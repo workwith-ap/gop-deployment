@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: egress-proxy-gnmi
+  namespace: gop-telegraf
+spec:
+  selector: {app: egress-keepalived-snmp-gnmi}
+  ports:
+    - {name: gnmi-dev5, port: 17005, targetPort: 17005, protocol: TCP}

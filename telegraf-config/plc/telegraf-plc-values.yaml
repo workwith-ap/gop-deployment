@@ -1,0 +1,115 @@
+# Helm values - release telegraf-tyo7-plc (chart influxdata/telegraf)
+# Device class: PLC via OPC-UA (independent device class).
+#
+#   helm install telegraf-tyo7-plc influxdata/telegraf \
+#     -n gop-telegraf \
+#     -f telegraf-config/plc/telegraf-plc-values.yaml \
+#     -f values/sites/tyo7-loki.yaml
+#
+# Needs these applied first (kubectl):ßßßßß
+#   telegraf-config/plc/plc-mapping.yaml        ConfigMap telegraf-plc-map
+#   telegraf-config/plc/plc-render-script.yaml  ConfigMap telegraf-plc-render-script
+#
+# At pod start the init container turns the mapping into one
+# [[inputs.opcua]] block per PLC (/etc/telegraf/plc.d/plc-inputs.conf).
+# Every PLC is read through egress-proxy-opcua:14000+last octet, which
+# egresses from VIP 10.2.218.52 (firewall-approved).
+#
+# Mapping changes do not restart the pod by themselves:
+#   kubectl -n gop-telegraf rollout restart deploy/telegraf-tyo7-plc
+
+replicaCount: 1
+
+image:
+  repo: "docker.io/library/telegraf"
+  tag: "1.31-alpine"          # same image validated against PLC061
+  pullPolicy: IfNotPresent
+
+args:
+  - "--config"
+  - "/etc/telegraf/telegraf.conf"
+  - "--config-directory"
+  - "/etc/telegraf/plc.d"
+
+initContainers:
+  - name: render-plc-inputs
+    image: "docker.io/library/telegraf:1.31-alpine"
+    command: ["/bin/sh", "/render/render-plc.sh"]
+    env:
+      - {name: CSV, value: /plc-map/plcs.csv}
+      - {name: OUT, value: /rendered/plc-inputs.conf}
+      - {name: PROXY_SVC, value: egress-proxy-opcua.gop-telegraf.svc.cluster.local}
+      # lower only if a PLC returns BadTooManyOperations
+      - {name: MAX_NODES_PER_SESSION, value: "1000"}
+    volumeMounts:
+      - {name: plc-render-script, mountPath: /render, readOnly: true}
+      - {name: plc-map, mountPath: /plc-map, readOnly: true}
+      - {name: plc-rendered, mountPath: /rendered}
+
+volumes:
+  - name: plc-render-script
+    configMap:
+      name: telegraf-plc-render-script
+      defaultMode: 0644
+  - name: plc-map
+    configMap:
+      name: telegraf-plc-map
+      defaultMode: 0644
+  - name: plc-rendered
+    emptyDir: {}
+
+mountPoints:
+  - name: plc-rendered
+    mountPath: /etc/telegraf/plc.d
+    readOnly: true
+
+env:
+  - name: HOSTNAME
+    value: "telegraf-tyo7-plc"
+
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {memory: 512Mi}
+
+# ClusterIP on :9273 (from the prometheus_client output below) -
+# Prometheus job telegraf-tyo7-plc scrapes it.
+service:
+  enabled: true
+  type: ClusterIP
+
+# Single replica - minAvailable: 1 would block node drains.
+pdb:
+  create: false
+
+config:
+  agent:
+    interval: "30s"
+    round_interval: true
+    metric_batch_size: 5000
+    metric_buffer_limit: 20000
+    collection_jitter: "0s"
+    flush_interval: "10s"
+    flush_jitter: "0s"
+    precision: ""
+    debug: false
+    quiet: false
+    logfile: ""
+    hostname: "$HOSTNAME"
+    omit_hostname: true
+  processors: []
+  outputs:
+    - prometheus_client:
+        listen: ":9273"
+        path: "/metrics"
+        metric_version: 2
+        # drop a tag ~3 polls after its PLC stops answering instead of
+        # serving the last value forever
+        expiration_interval: "90s"
+  inputs: []          # PLC inputs come from /etc/telegraf/plc.d (init container)
+
+metrics:
+  health:
+    enabled: false
+  internal:
+    enabled: true
+    collect_memstats: false

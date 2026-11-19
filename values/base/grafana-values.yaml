@@ -58,6 +58,12 @@ envValueFrom:
       name: grafana-s3-credentials
       key: secret_key
 
+# plugins installed on every pod start — required because persistence
+# is disabled (state lives in Postgres, not a local volume), so a
+# plugin installed through the UI is wiped on restart/replica roll
+env:
+  GF_INSTALL_PLUGINS: "gapit-htmlgraphics-panel"
+
 
 grafana.ini:
   database:

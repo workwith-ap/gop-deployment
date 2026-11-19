@@ -6,7 +6,7 @@
 # values/sites/<dc>.yaml and get merged on top of this file.
 
 server:
-  retention: "6h"   # local buffer only — Thanos Receive holds the real history
+  retention: "7d"   # local buffer only — Thanos Receive holds the real history
 
   global:
     scrape_interval: 30s
@@ -27,7 +27,7 @@ server:
   persistentVolume:
     enabled: true
     storageClass: longhorn
-    size: 10Gi
+    size: 30Gi
 
   resources:
     requests:
@@ -47,31 +47,33 @@ server:
 # created (per-device-class split, new site, etc.), a job MUST be added
 # here manually — nothing auto-discovers it.
 #
-# TWO jobs now, not one — telegraf-tyo7 was split into a SNMP/OPC-UA
-# release and a TH-sensor release (see gop-telegraf's
-# CHANGES_AND_ARCHITECTURE.md), each with its own Service, so each needs
-# its own job here:
-#   - telegraf-tyo7            → SNMP + OPC-UA (17 PLCs, network device)
-#   - telegraf-tyo7-th-sensors → 75 TH sensors, CSV-generated config
-#
-# The previous single "telegraf-bms" job pointed at
-# telegraf-tyo7.gop-telegraf.svc.cluster.local:9273 — a Service that no
-# longer exists after the split. It was scraping nothing.
+# One job per Telegraf release (one release per device class), each
+# scraping that release's own ClusterIP Service on :9273:
+#   - telegraf-tyo7-th-sensors    → 75 TH sensors, CSV-generated config
+#   - telegraf-tyo7-juniper-snmp  → Juniper switch via SNMP
+#   - telegraf-tyo7-juniper-gnmi  → Juniper switch via gNMI
+#   - telegraf-tyo7-plc           → PLCs via OPC-UA (through egress-proxy-opcua
+#                                   / VIP .52), tags from plc-mapping.yaml
 serverFiles:
   prometheus.yml:
     scrape_configs:
-      - job_name: telegraf-tyo7
-        static_configs:
-          - targets: ["telegraf-tyo7.gop-telegraf.svc.cluster.local:9273"]
-        # NOTE: this target does not currently resolve — the telegraf-tyo7
-        # release itself is missing (no pod, no Service) as of this
-        # writing. This job is correct and should stay, but won't return
-        # data until that release is restored. Don't remove this job just
-        # because it's failing right now.
-
       - job_name: telegraf-tyo7-th-sensors
         static_configs:
           - targets: ["telegraf-tyo7-th-sensors.gop-telegraf.svc.cluster.local:9273"]
+
+      - job_name: telegraf-tyo7-juniper-snmp
+        static_configs:
+          - targets: ["telegraf-tyo7-juniper-snmp.gop-telegraf.svc.cluster.local:9273"]
+
+      - job_name: telegraf-tyo7-juniper-gnmi
+        static_configs:
+          - targets: ["telegraf-tyo7-juniper-gnmi.gop-telegraf.svc.cluster.local:9273"]
+
+      - job_name: telegraf-tyo7-plc
+        # ~4.3k series per scrape — allow more than the 10s default timeout
+        scrape_timeout: 20s
+        static_configs:
+          - targets: ["telegraf-tyo7-plc.gop-telegraf.svc.cluster.local:9273"]
 
         # additional jobs (e.g. node-exporter, kube-state-metrics) can be
         # appended here as GOP's scope grows — no chart change needed

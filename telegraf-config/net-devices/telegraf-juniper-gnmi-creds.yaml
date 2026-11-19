@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: telegraf-juniper-gnmi-creds
+  namespace: gop-telegraf
+type: Opaque
+stringData:
+  GNMI_USER: "magent"
+  GNMI_PASS: "u7xudir9p719361h5v808z6ibp9zhnaj"

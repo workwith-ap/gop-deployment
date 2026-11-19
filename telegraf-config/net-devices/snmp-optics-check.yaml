@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: snmp-optics-check-config
+  namespace: gop-telegraf
+data:
+  optics.conf: |
+    [agent]
+      snmp_translator = "gosmi"
+    [[inputs.snmp]]
+      agents = ["udp://egress-proxy-snmp.gop-telegraf.svc.cluster.local:16005"]
+      version = 2
+      community = "DE-SNMP-RO"
+      timeout = "10s"
+      retries = 2
+      name = "t_dom"
+      [[inputs.snmp.table]]
+        name = "dom"
+        index_as_tag = true
+        field = [{name = "c1", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.1"}, {name = "c2", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.2"}, {name = "c3", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.3"}, {name = "c4", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.4"}, {name = "c5", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.5"}, {name = "c6", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.6"}, {name = "c7", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.7"}, {name = "c8", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.8"}, {name = "c9", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.9"}, {name = "c10", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.10"}, {name = "c11", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.11"}, {name = "c12", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.12"}, {name = "c13", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.13"}, {name = "c14", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.14"}, {name = "c15", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.15"}, {name = "c16", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.16"}, {name = "c17", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.17"}, {name = "c18", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.18"}, {name = "c19", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.19"}, {name = "c20", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.20"}, {name = "c21", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.21"}, {name = "c22", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.22"}, {name = "c23", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.23"}, {name = "c24", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.24"}, {name = "c25", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.25"}, {name = "c26", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.26"}, {name = "c27", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.27"}, {name = "c28", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.28"}, {name = "c29", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.29"}, {name = "c30", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.30"}, {name = "c31", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.31"}, {name = "c32", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.32"}, {name = "c33", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.33"}, {name = "c34", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.34"}, {name = "c35", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.35"}, {name = "c36", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.36"}, {name = "c37", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.37"}, {name = "c38", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.38"}, {name = "c39", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.39"}, {name = "c40", oid = ".1.3.6.1.4.1.2636.3.60.1.1.1.1.40"}]
+    [[outputs.file]]
+      files = ["stdout"]
+  run.sh: |
+    timeout 120 telegraf --config /etc/snmp-optics/optics.conf --once > /tmp/o.out 2> /tmp/o.log
+    tr -c '[:print:]\n' '?' < /tmp/o.out > /tmp/o.txt
+    echo "=== errors"
+    grep -E " (E|W)! " /tmp/o.log | grep -vE "Strict environment|skip_processors_after|agent_host_tag" | head -8 | cut -c1-300
+    echo "=== dom rows"
+    grep -c "^dom," /tmp/o.txt
+    grep "^dom," /tmp/o.txt | head -4 | sed -E 's/agent_host=[^,]*,host=[^,]*,//' | cut -c1-900
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: snmp-optics-check
+  namespace: gop-telegraf
+spec:
+  restartPolicy: Never
+  containers:
+    - name: telegraf
+      image: telegraf:1.39.3
+      command: ["sh", "/etc/snmp-optics/run.sh"]
+      volumeMounts:
+        - {name: cfg, mountPath: /etc/snmp-optics}
+  volumes:
+    - name: cfg
+      configMap: {name: snmp-optics-check-config}

@@ -1,0 +1,125 @@
+# Init-container script for release telegraf-tyo7-plc.
+# Reads plc-mapping.yaml (ConfigMap telegraf-plc-map) and writes one
+# [[inputs.opcua]] block per PLC into the emptyDir Telegraf loads.
+# Mounted by telegraf-plc-values.yaml (initContainers / volumes).
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telegraf-plc-render-script
+  namespace: gop-telegraf
+data:
+  render-plc.sh: |
+    #!/bin/sh
+    # Renders one [[inputs.opcua]] block per PLC (one [[inputs.opcua.nodes]]
+    # per row) from plc-mapping.yaml (ConfigMap telegraf-plc-map). Runs as the
+    # init container of release telegraf-tyo7-plc; output goes to the
+    # emptyDir that the telegraf container loads with --config-directory.
+    #
+    # Mapping columns:
+    #   ip,node_id,provider_tag,equipment_type,variable,equipment_name,unit
+    #   All 7 columns required. ip + node_id drive the read (a node may feed several
+    #   tags; ip + node_id + provider_tag must be unique), the rest become
+    #   Prometheus labels.
+    # Header row, # comment lines and blank lines are skipped.
+    # Any incomplete, bad or duplicate row = FATAL (pod stays in Init, the
+    # init container log names the row).
+    #
+    # Endpoint = egress-proxy-opcua, port 14000 + last IP octet (same scheme as
+    # start-proxies.sh). A PLC in the mapping must also be in start-proxies.sh
+    # MAPPINGS + plc-keepalive-ds.yaml ports + plc-service.yaml ports.
+    set -eu
+
+    CSV="${CSV:-/plc-map/plcs.csv}"
+    OUT="${OUT:-/rendered/plc-inputs.conf}"
+    PROXY_SVC="${PROXY_SVC:-egress-proxy-opcua.gop-telegraf.svc.cluster.local}"
+    # One OPC-UA session per block. Lower only if a PLC rejects the read with
+    # BadTooManyOperations (that PLC is then read in several sessions).
+    MAX_NODES_PER_SESSION="${MAX_NODES_PER_SESSION:-1000}"
+
+    [ -s "$CSV" ] || { echo "FATAL: $CSV missing or empty" >&2; exit 1; }
+
+    TMP="${OUT}.tmp"
+
+    # strip CR, drop blank + comment lines, sort by IP so each PLC is contiguous
+    tr -d '\r' < "$CSV" \
+      | grep -v '^[[:space:],]*$' \
+      | grep -v '^[[:space:]]*#' \
+      | sort -t, -k1,1 \
+      | awk -F, -v svc="$PROXY_SVC" -v maxn="$MAX_NODES_PER_SESSION" '
+    function trim(s) { gsub(/^[ \t"]+|[ \t"]+$/, "", s); return s }
+    function esc(s)  { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); return s }
+    function kv(k, v) { return (v == "") ? "" : sprintf(", %s = \"%s\"", k, esc(v)) }
+    function header(plc, ip, port, part) {
+      printf "\n[[inputs.opcua]]\n"
+      printf "  name = \"plc_reading\"\n"
+      printf "  endpoint = \"opc.tcp://%s:%d\"\n", svc, port
+      printf "  connect_timeout = \"10s\"\n"
+      printf "  request_timeout = \"10s\"\n"
+      printf "  security_policy = \"None\"\n"
+      printf "  security_mode = \"None\"\n"
+      printf "  auth_method = \"Anonymous\"\n"
+      printf "  timestamp = \"gather\"\n"
+      printf "  tagexclude = [\"id\"]\n"
+      printf "  [inputs.opcua.tags]\n"
+      printf "    plc = \"%s\"\n", plc
+      printf "    plc_ip = \"%s\"\n", ip
+      if (part > 1) printf "    # session part %d\n", part
+    }
+    {
+      ip = trim($1); nid = trim($2)
+      ptag = trim($3); etype = trim($4); var = trim($5); ename = trim($6); unit = trim($7)
+
+      if (ip !~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) {
+        if (ip ~ /[A-Za-z]/) { next }                    # header row
+        printf "FATAL: bad IP \"%s\" in row: %s\n", ip, $0 > "/dev/stderr"; bad = 1; exit 1
+      }
+      if (nid !~ /^ns=[0-9]+;s=.+/) {
+        printf "FATAL: bad node_id for %s: %s\n", ip, nid > "/dev/stderr"; bad = 1; exit 1
+      }
+      if (ptag == "" || etype == "" || var == "" || ename == "" || unit == "" || ptag ~ /^#/) {
+        printf "FATAL: incomplete row (all 7 columns required): %s\n", $0 > "/dev/stderr"; bad = 1; exit 1
+      }
+      # A node may feed several tags (e.g. one PLC value for current_a/b/c);
+      # only the same ip + node_id + provider_tag twice is a duplicate.
+      if ((ip SUBSEP nid SUBSEP ptag) in seen) {
+        printf "FATAL: duplicate row %s %s %s\n", ip, nid, ptag > "/dev/stderr"; bad = 1; exit 1
+      }
+      seen[ip SUBSEP nid SUBSEP ptag] = 1
+
+      ns = nid;    sub(/^ns=/, "", ns); sub(/;.*$/, "", ns)
+      ident = nid; sub(/^ns=[0-9]+;s=/, "", ident)
+      node = ident; sub(/^.*:/, "", node); sub(/\.pv$/, "", node)
+      dtype = (node ~ /_BOOL_/) ? "BOOL" : ((node ~ /_FLOAT_/) ? "FLOAT" : "")
+
+      split(ip, o, ".")
+      port = 14000 + o[4]
+      plc = sprintf("PLC%03d", o[4])
+
+      if (ip != cur || n >= maxn) {
+        part = (ip != cur) ? 1 : part + 1
+        cur = ip; n = 0
+        header(plc, ip, port, part)
+        if (!(plc in per)) nplc++
+      }
+      n++; total++; per[plc]++
+
+      printf "\n  [[inputs.opcua.nodes]]\n"
+      printf "    name = \"value\"\n"
+      printf "    namespace = \"%s\"\n", ns
+      printf "    identifier_type = \"s\"\n"
+      printf "    identifier = \"%s\"\n", esc(ident)
+      printf "    default_tags = { node = \"%s\"%s%s%s%s%s%s }\n", esc(node), \
+        kv("data_type", dtype), kv("provider_tag", ptag), kv("equipment_type", etype), \
+        kv("variable", var), kv("equipment_name", ename), kv("unit", unit)
+    }
+    END {
+      if (bad) exit 1
+      if (total == 0) { print "FATAL: no tag rows found" > "/dev/stderr"; exit 1 }
+      for (p in per) printf "  %s: %d tags\n", p, per[p] > "/dev/stderr"
+      printf "rendered %d tags across %d PLCs\n", total, nplc > "/dev/stderr"
+    }' > "$TMP"
+
+    mv "$TMP" "$OUT"
+    chmod 0644 "$OUT"
+    echo "$(date) wrote $OUT ($(wc -c < "$OUT") bytes)"

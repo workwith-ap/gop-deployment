@@ -1,0 +1,67 @@
+# ============================================================================
+# telegraf-tyo7-juniper-snmp — Helm values
+# ============================================================================
+# Verified against the confirmed-working telegraf-tyo7-th-sensors-values.yaml
+# pattern (its own comment block cites `helm show values influxdata/telegraf`
+# as the source of truth for key names):
+#   - `mountPoints` is a TOP-LEVEL key, not nested inside `volumes[]`.
+#   - `mountPoints[].mountPath` is a DIRECTORY, no `subPath` needed — the
+#     ConfigMap's single key becomes a file in that directory automatically.
+#   - No `args`/`--config-directory` needed — the chart picks up
+#     /etc/telegraf/telegraf.d automatically once something is mounted there.
+#   - No `containerPorts` needed — the Service can target a port the
+#     container is actually listening on without it being declared in
+#     the pod spec.
+# Earlier versions of this file got all three of the above wrong.
+#
+# Install:
+#   kubectl apply -f telegraf-juniper-snmp-inputs-config.yaml   # first
+#   helm upgrade --install telegraf-tyo7-juniper-snmp influxdata/telegraf \
+#     -n gop-telegraf \
+#     -f telegraf-config/net-devices/telegraf-juniper-snmp-values.yaml \
+#     -f values/sites/tyo7-loki.yaml
+# ============================================================================
+
+env:
+  - name: HOSTNAME
+    value: "telegraf-tyo7-juniper-snmp"
+
+config:
+  agent:
+    interval: "60s"
+    round_interval: true
+    metric_batch_size: 1000
+    metric_buffer_limit: 10000
+    collection_jitter: "5s"
+    flush_interval: "60s"
+    flush_jitter: "5s"
+    # Default translator ("netsnmp") shells out to the external
+    # snmptranslate/snmptable binaries to resolve table structure —
+    # not present in the telegraf image, causing "Was that a table?
+    # ...: exit status 1" on startup. gosmi is Telegraf's built-in
+    # pure-Go MIB parser — no external binary needed, handles
+    # standard MIBs like IF-MIB natively.
+    snmp_translator: "gosmi"
+
+  outputs:
+    - prometheus_client:
+        listen: ":9273"
+        metric_version: 2
+        #  prometheus_client drops a
+        # metric from /metrics once it's older than this — the 60s
+        # default was too short there and metrics vanished between
+        # scrapes. Matching their 20m value here for the same reason.
+        expiration_interval: "20m"
+
+volumes:
+  - name: juniper-snmp-inputs-vol
+    configMap:
+      name: telegraf-juniper-snmp-inputs
+
+mountPoints:
+  - name: juniper-snmp-inputs-vol
+    mountPath: /etc/telegraf/telegraf.d
+
+service:
+  enabled: true
+  type: ClusterIP

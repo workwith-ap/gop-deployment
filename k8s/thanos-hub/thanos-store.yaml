@@ -40,7 +40,7 @@ spec:
       spec:
         accessModes: ["ReadWriteOnce"]
         storageClassName: longhorn
-        resources: {requests: {storage: 10Gi}}
+        resources: {requests: {storage: 20Gi}}
 ---
 apiVersion: v1
 kind: Service

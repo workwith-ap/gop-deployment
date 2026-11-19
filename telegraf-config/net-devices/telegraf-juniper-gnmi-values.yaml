@@ -1,0 +1,94 @@
+# ============================================================================
+# telegraf-tyo7-juniper-gnmi — Helm values
+#
+# Install:
+#   kubectl apply -f telegraf-juniper-gnmi-inputs-config.yaml   # first
+#   helm upgrade --install telegraf-tyo7-juniper-gnmi influxdata/telegraf \
+#     -n gop-telegraf \
+#     -f telegraf-config/net-devices/telegraf-juniper-gnmi-values.yaml \
+#     -f values/sites/tyo7-loki.yaml
+# ============================================================================
+
+env:
+  - name: HOSTNAME
+    value: "telegraf-tyo7-juniper-gnmi"
+
+envFromSecret: telegraf-juniper-gnmi-creds
+# telegraf-juniper-gnmi-creds
+
+config:
+  agent:
+    # inputs.gnmi is a service plugin — it streams continuously and
+    # ignores this interval for gathering; it still governs flush cadence.
+    interval: "30s"
+    flush_interval: "30s"
+    flush_jitter: "5s"
+
+  outputs:
+    - prometheus_client:
+        listen: ":9273"
+        metric_version: 2
+        # prometheus_client drops a
+        # metric from /metrics once it's older than this — the 60s
+        # default was too short there and metrics vanished between
+        # scrapes. Matters even more here since interface_state uses
+        # on_change mode and may not re-emit for a long time.
+        expiration_interval: "20m"
+
+volumes:
+  - name: juniper-gnmi-inputs-vol
+    configMap:
+      name: telegraf-juniper-gnmi-inputs
+
+mountPoints:
+  - name: juniper-gnmi-inputs-vol
+    mountPath: /etc/telegraf/telegraf.d
+# ============================================================================
+# telegraf-tyo7-juniper-gnmi — Helm values
+#
+# Install:
+#   kubectl apply -f telegraf-juniper-gnmi-inputs-config.yaml   # first
+#   helm upgrade --install telegraf-tyo7-juniper-gnmi influxdata/telegraf \
+#     -n gop-telegraf \
+#     -f telegraf-config/net-devices/telegraf-juniper-gnmi-values.yaml \
+#     -f values/sites/tyo7-loki.yaml
+# ============================================================================
+
+env:
+  - name: HOSTNAME
+    value: "telegraf-tyo7-juniper-gnmi"
+
+config:
+  agent:
+    # inputs.gnmi is a service plugin — it streams continuously and
+    # ignores this interval for gathering; it still governs flush cadence.
+    interval: "30s"
+    flush_interval: "30s"
+    flush_jitter: "5s"
+
+  outputs:
+    - prometheus_client:
+        listen: ":9273"
+        metric_version: 2
+        # prometheus_client drops a
+        # metric from /metrics once it's older than this — the 60s
+        # default was too short there and metrics vanished between
+        # scrapes. Matters even more here since interface_state uses
+        # on_change mode and may not re-emit for a long time.
+        expiration_interval: "20m"
+
+volumes:
+  - name: juniper-gnmi-inputs-vol
+    configMap:
+      name: telegraf-juniper-gnmi-inputs
+
+mountPoints:
+  - name: juniper-gnmi-inputs-vol
+    mountPath: /etc/telegraf/telegraf.d
+
+service:
+  enabled: true
+  type: ClusterIP
+service:
+  enabled: true
+  type: ClusterIP

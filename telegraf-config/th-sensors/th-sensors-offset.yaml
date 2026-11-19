@@ -1,15 +1,28 @@
 # ============================================================================
 # telegraf-th-sensor-static-config
 # ============================================================================
-# Holds the ONE piece of TH sensor config that isn't generated per-sensor:
-# processors.conf. Scale factors come from the WIFI-TH datasheet, not
-# per-device, so they don't belong in the CSV — they're the same for
-# every sensor of this model.
+# Holds the TH sensor config that isn't generated per-sensor:
 #
-# Copied into /etc/telegraf/telegraf.d by the TH sensor init container
-# alongside the generated th-sensor-udp.conf (file 05/06). If you ever add a
-# second sensor model with different scaling, add a new namepass-scoped
-# [[processors.scale]] block here rather than a new file.
+#   processors.conf — scale factors. They come from the WIFI-TH datasheet,
+#                     not per-device, so they don't belong in the CSV —
+#                     they're the same for every sensor of this model.
+#
+#   inventory.conf  — publishes every row of sensors.csv (file 04) as
+#                     th_sensor_inventory_internal_listener_port, whether
+#                     or not that sensor is currently reporting. Grafana
+#                     uses it as the fixed sensor list: Total Sensors and
+#                     the Status table's row list count the CSV, not live
+#                     readings, so a dead sensor never drops out of the
+#                     count. The metric's VALUE is the listener port and
+#                     is not used — only the series' existence matters.
+#                     Reads the CSV from the main container's mount of
+#                     th-sensor-map-vol (see values file, mountPoints).
+#
+# Both files are copied into /etc/telegraf/telegraf.d by the TH sensor init
+# container (cp /config-static/*.conf) alongside the generated
+# th-sensor-udp.conf (file 05/06). If you ever add a second sensor model
+# with different scaling, add a new namepass-scoped [[processors.scale]]
+# block here rather than a new file.
 # ============================================================================
 
 apiVersion: v1
@@ -40,3 +53,22 @@ data:
         factor = 0.01
         offset = 0.0
         fields = ["battery_voltage"]
+
+  inventory.conf: |
+    # Fixed sensor list, one series per CSV row.
+    # Output metric: th_sensor_inventory_internal_listener_port{sensor_ip,equipment_name,location}
+    #
+    # csv_column_names overrides the CSV header so "ip" is published as
+    # "sensor_ip" — the same label name the th_sensor_reading_* metrics use,
+    # so Grafana can join/compare on(sensor_ip).
+    # String columns (provider_tag_*) are not exported by prometheus_client;
+    # only the numeric internal_listener_port becomes the metric.
+    # Not touched by processors.scale (its namepass is th_sensor_reading only).
+    [[inputs.file]]
+      files = ["/etc/telegraf/th-sensor-map/sensors.csv"]
+      name_override = "th_sensor_inventory"
+      data_format = "csv"
+      csv_header_row_count = 1
+      csv_trim_space = true
+      csv_column_names = ["sensor_ip", "internal_listener_port", "provider_tag_temp", "provider_tag_hum", "equipment_name", "location"]
+      csv_tag_columns = ["sensor_ip", "equipment_name", "location"]
